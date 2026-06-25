@@ -1,3 +1,5 @@
+import { createSpreadsheet } from '@ethercalc/socialcalc-headless';
+
 import { encodeRoom } from '../lib/room-name.ts';
 import { bulkMirrorRoomsToD1 } from '../lib/rooms-index.ts';
 
@@ -226,7 +228,7 @@ function resolveSandstormDefaultRoom(
   // Some legacy Sandstorm grains store `sheet` as a tiny index:
   // A1="#url", B1="#title", A2="/sheet.1". In that shape, the linked
   // local room is the actual spreadsheet the grain should open.
-  const linkedRoom = findLegacyIndexLinkedRoom(rooms);
+  const linkedRoom = findLegacySheetIndexTarget(rooms);
   if (linkedRoom !== undefined) return linkedRoom;
 
   return chooseBestVisibleRoom(rooms);
@@ -258,30 +260,31 @@ function isFormdataRoom(name: string): boolean {
 }
 
 function snapshotHasCells(snapshot: string): boolean {
-  return /^cell:[A-Z]+[0-9]+:/m.test(snapshot);
+  return Object.keys(snapshotCells(snapshot)).length > 0;
 }
 
-function findLegacyIndexLinkedRoom(
+function findLegacySheetIndexTarget(
   rooms: readonly LegacyRoom[],
 ): LegacyRoom | undefined {
+  const sheetIndex = rooms.find((room) => room.name === 'sheet');
+  if (sheetIndex === undefined) return undefined;
+
   const byName = new Map(rooms.map((room) => [room.name, room]));
-  for (const indexRoom of rooms) {
-    for (const targetName of legacyIndexLocalRoomLinks(indexRoom.snapshot)) {
-      const target = byName.get(targetName);
-      if (
-        target !== undefined &&
-        !isFormdataRoom(target.name) &&
-        hasVisibleSheetState(target)
-      ) {
-        return target;
-      }
+  for (const targetName of legacyIndexLocalRoomLinks(sheetIndex.snapshot)) {
+    const target = byName.get(targetName);
+    if (
+      target !== undefined &&
+      !isFormdataRoom(target.name) &&
+      hasVisibleSheetState(target)
+    ) {
+      return target;
     }
   }
   return undefined;
 }
 
 function legacyIndexLocalRoomLinks(snapshot: string): string[] {
-  const cells = parseSnapshotCells(snapshot);
+  const cells = snapshotTextCells(snapshot);
   const out: string[] = [];
   for (const [coord, value] of cells) {
     const pos = parseCoord(coord);
@@ -289,36 +292,32 @@ function legacyIndexLocalRoomLinks(snapshot: string): string[] {
     const header = cells.get(`${pos.col}1`);
     if (header !== '#url') continue;
     const room = value.slice(1).split(/[?#]/, 1)[0];
-    if (/^[A-Za-z0-9_.=-]+$/.test(room)) out.push(room);
+    if (room !== undefined && /^[A-Za-z0-9_.=-]+$/.test(room)) out.push(room);
   }
   return out;
 }
 
-function parseSnapshotCells(snapshot: string): Map<string, string> {
-  const cells = new Map<string, string>();
-  for (const line of snapshot.split('\n')) {
-    const match = /^cell:([A-Z]+[0-9]+):(.*)$/.exec(line);
-    if (match === null) continue;
-    const value = cellTextValue(match[2] ?? '');
-    if (value !== null) cells.set(match[1] as string, value);
+function snapshotTextCells(snapshot: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const [coord, cell] of Object.entries(snapshotCells(snapshot))) {
+    const value = cellDataValue(cell);
+    if (typeof value === 'string') out.set(coord, value);
   }
-  return cells;
+  return out;
 }
 
-function cellTextValue(rest: string): string | null {
-  const parts = rest.split(':');
-  for (let i = 0; i < parts.length - 1; i += 2) {
-    if (parts[i] === 't') return decodeSaveValue(parts[i + 1] as string);
+function snapshotCells(snapshot: string): Record<string, unknown> {
+  if (snapshot.length === 0) return {};
+  try {
+    return createSpreadsheet({ snapshot }).exportCells();
+  } catch {
+    return {};
   }
-  return null;
 }
 
-function decodeSaveValue(value: string): string {
-  return value
-    .replace(/\\n/g, '\n')
-    .replace(/\\r/g, '\r')
-    .replace(/\\c/g, ':')
-    .replace(/\\b/g, '\\');
+function cellDataValue(cell: unknown): unknown {
+  if (cell === null || typeof cell !== 'object') return undefined;
+  return (cell as { readonly datavalue?: unknown }).datavalue;
 }
 
 function parseCoord(coord: string): { col: string; row: number } | null {

@@ -352,6 +352,78 @@ describe('ensureSandstormDefaultRoom', () => {
     ]);
   });
 
+  it('does not treat arbitrary rooms as legacy Sandstorm indexes', () => {
+    expect(
+      ensureSandstormDefaultRoom([
+        {
+          name: 'notes',
+          snapshot: [
+            'version:1.5',
+            'cell:A1:t:#url',
+            'cell:A2:t:/target',
+            'sheet:c:1:r:2:tvf:1',
+            '',
+          ].join('\n'),
+          log: [],
+          audit: [],
+          chat: [],
+          ecell: {},
+          updatedAt: 50,
+        },
+        {
+          name: 'target',
+          snapshot: 'version:1.5\ncell:A1:t:target-data\n',
+          log: [],
+          audit: [],
+          chat: [],
+          ecell: {},
+          updatedAt: 10,
+        },
+      ]),
+    ).toEqual([
+      {
+        name: 'notes',
+        snapshot: [
+          'version:1.5',
+          'cell:A1:t:#url',
+          'cell:A2:t:/target',
+          'sheet:c:1:r:2:tvf:1',
+          '',
+        ].join('\n'),
+        log: [],
+        audit: [],
+        chat: [],
+        ecell: {},
+        updatedAt: 50,
+      },
+      {
+        name: 'sheet1',
+        aliasOf: 'notes',
+        snapshot: [
+          'version:1.5',
+          'cell:A1:t:#url',
+          'cell:A2:t:/target',
+          'sheet:c:1:r:2:tvf:1',
+          '',
+        ].join('\n'),
+        log: [],
+        audit: [],
+        chat: [],
+        ecell: {},
+        updatedAt: 50,
+      },
+      {
+        name: 'target',
+        snapshot: 'version:1.5\ncell:A1:t:target-data\n',
+        log: [],
+        audit: [],
+        chat: [],
+        ecell: {},
+        updatedAt: 10,
+      },
+    ]);
+  });
+
   it('replaces an empty sheet1 with the newest visible non-formdata room', () => {
     expect(
       ensureSandstormDefaultRoom([
