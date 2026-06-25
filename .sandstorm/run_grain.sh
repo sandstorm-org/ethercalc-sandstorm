@@ -26,6 +26,17 @@
 #   uses config.capnp, which does not bind the legacy /var reader.
 set -euo pipefail
 
+now_ms() {
+  local ms
+  ms="$(date +%s%3N 2>/dev/null || true)"
+  case "$ms" in
+    *[!0-9]*|"") printf '%s000\n' "$(date +%s)" ;;
+    *) printf '%s\n' "$ms" ;;
+  esac
+}
+
+STARTUP_START_MS="$(now_ms)"
+
 # Resolve the app directory from this script's parent directory. The
 # script lives under .sandstorm/, while runtime assets live at the app
 # root. In Sandstorm dev/package mode that root is /opt/app.
@@ -86,11 +97,11 @@ new_migrate_token() {
 
 wait_for_health() {
   local port="$1"
-  for _ in $(seq 1 60); do
+  for _ in $(seq 1 600); do
     if curl -sf "http://127.0.0.1:${port}/_health" > /dev/null 2>&1; then
       return 0
     fi
-    sleep 1
+    sleep 0.1
   done
   return 1
 }
@@ -183,5 +194,10 @@ fi
 
 # Normal public runtime: no legacy disk binding and no migration token.
 start_normal_worker
+if wait_for_health 33411; then
+  echo "launcher: startup complete in $(($(now_ms) - STARTUP_START_MS))ms" >&2
+else
+  echo "launcher: normal worker health check failed after $(($(now_ms) - STARTUP_START_MS))ms; leaving process running for Sandstorm logs" >&2
+fi
 
 wait $WORKER_PID

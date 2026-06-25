@@ -88,6 +88,7 @@ sandstorm-http-bridge-config
 sandstorm-manifest
 usr/bin/bash
 usr/bin/curl
+usr/bin/date
 usr/bin/dirname
 usr/bin/mkdir
 usr/bin/seq
