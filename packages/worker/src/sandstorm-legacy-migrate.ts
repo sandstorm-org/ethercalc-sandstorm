@@ -47,7 +47,7 @@ export default {
     try {
       const stats = await migrateLegacyDisk(env);
       return text(
-        `migrated ${stats.rooms} rooms; dropped ${stats.droppedEntries} oversized entries`,
+        `migrated ${stats.rooms} rooms; dropped ${stats.droppedEntries} oversized entries; rooms=${stats.roomNames.join(',')}`,
         201,
       );
     } catch (err) {
@@ -63,4 +63,3 @@ function text(body: string, status: number): Response {
     headers: { 'Content-Type': TEXT_CT },
   });
 }
-

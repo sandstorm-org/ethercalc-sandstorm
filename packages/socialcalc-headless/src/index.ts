@@ -232,6 +232,9 @@ export function createSpreadsheet(opts: HeadlessSpreadsheetOptions = {}): Headle
       if (parts?.sheet) {
         ss.sheet.ResetSheet();
         ss.ParseSheetSave(opts.snapshot.substring(parts.sheet.start, parts.sheet.end));
+      } else if (isBareSheetSave(opts.snapshot)) {
+        ss.sheet.ResetSheet();
+        ss.ParseSheetSave(opts.snapshot);
       }
     } catch (e) { console.error("Error in DecodeSpreadsheetSave:", e); }
   }
@@ -244,4 +247,8 @@ export function createSpreadsheet(opts: HeadlessSpreadsheetOptions = {}): Headle
     }
   }
   return wrapped;
+}
+
+function isBareSheetSave(snapshot: string): boolean {
+  return /^version:\d+(?:\.\d+)?$/m.test(snapshot);
 }

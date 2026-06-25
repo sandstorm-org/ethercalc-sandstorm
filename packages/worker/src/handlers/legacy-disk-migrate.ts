@@ -19,11 +19,13 @@ export interface LegacyRoom {
   readonly chat: readonly string[];
   readonly ecell: Readonly<Record<string, string>>;
   readonly updatedAt?: number;
+  readonly aliasOf?: string;
 }
 
 export interface LegacyMigrationStats {
   readonly rooms: number;
   readonly droppedEntries: number;
+  readonly roomNames: readonly string[];
 }
 
 type LegacyReadText = (path: string) => Promise<string | null>;
@@ -144,27 +146,30 @@ export async function migrateLegacyDisk(
 ): Promise<LegacyMigrationStats> {
   const readText = (path: string): Promise<string | null> => readLegacyText(env.LEGACY, path);
   const dumpJson = await readText('/dump.json');
-  const rooms =
+  const rooms = ensureSandstormDefaultRoom(
     dumpJson !== null
       ? roomsFromLegacyJsonBlob(dumpJson)
       : await roomsFromLegacyDumpManifest(
           (await readText('/ethercalc-migrate-manifest.txt')) ?? '',
           readText,
-        );
+        ),
+  );
 
   const index: Array<{ readonly room: string; readonly updatedAt: number }> = [];
+  const roomNames: string[] = [];
   let droppedEntries = 0;
   for (const room of rooms) {
+    const countDropped = room.aliasOf === undefined;
     const seed = {
       snapshot: room.snapshot,
       log: filterOversized(room.log, () => {
-        droppedEntries += 1;
+        if (countDropped) droppedEntries += 1;
       }),
       audit: filterOversized(room.audit, () => {
-        droppedEntries += 1;
+        if (countDropped) droppedEntries += 1;
       }),
       chat: filterOversized(room.chat, () => {
-        droppedEntries += 1;
+        if (countDropped) droppedEntries += 1;
       }),
       ecell: room.ecell,
       updatedAt: room.updatedAt ?? 0,
@@ -180,6 +185,9 @@ export async function migrateLegacyDisk(
       throw new Error(`seed ${room.name}: ${res.status} ${text}`);
     }
     index.push({ room: room.name, updatedAt: seed.updatedAt });
+    roomNames.push(
+      room.aliasOf === undefined ? room.name : `${room.name}<=${room.aliasOf}`,
+    );
   }
 
   if (env.DB !== undefined) {
@@ -187,7 +195,136 @@ export async function migrateLegacyDisk(
       await bulkMirrorRoomsToD1(env.DB, index.slice(i, i + INDEX_BATCH_SIZE));
     }
   }
-  return { rooms: rooms.length, droppedEntries };
+  return { rooms: rooms.length, droppedEntries, roomNames };
+}
+
+export function ensureSandstormDefaultRoom(
+  rooms: readonly LegacyRoom[],
+): LegacyRoom[] {
+  const defaultRoom = resolveSandstormDefaultRoom(rooms);
+  if (defaultRoom === undefined || defaultRoom.name === 'sheet1') return [...rooms];
+
+  const sheet1: LegacyRoom = {
+    ...defaultRoom,
+    name: 'sheet1',
+    aliasOf: defaultRoom.name,
+  };
+  const withoutEmptySheet1 = rooms.filter((room) => room.name !== 'sheet1');
+  return [...withoutEmptySheet1, sheet1].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+}
+
+function resolveSandstormDefaultRoom(
+  rooms: readonly LegacyRoom[],
+): LegacyRoom | undefined {
+  const existingSheet1 = rooms.find((room) => room.name === 'sheet1');
+  if (existingSheet1 !== undefined && hasVisibleSheetState(existingSheet1)) {
+    return existingSheet1;
+  }
+
+  // Some legacy Sandstorm grains store `sheet` as a tiny index:
+  // A1="#url", B1="#title", A2="/sheet.1". In that shape, the linked
+  // local room is the actual spreadsheet the grain should open.
+  const linkedRoom = findLegacyIndexLinkedRoom(rooms);
+  if (linkedRoom !== undefined) return linkedRoom;
+
+  return chooseBestVisibleRoom(rooms);
+}
+
+function chooseBestVisibleRoom(
+  rooms: readonly LegacyRoom[],
+): LegacyRoom | undefined {
+  const visible = rooms.filter(hasVisibleSheetState);
+  if (visible.length === 0) return undefined;
+
+  return [...visible].sort((a, b) => {
+    const aForm = isFormdataRoom(a.name);
+    const bForm = isFormdataRoom(b.name);
+    if (aForm !== bForm) return aForm ? 1 : -1;
+    const aUpdated = a.updatedAt ?? 0;
+    const bUpdated = b.updatedAt ?? 0;
+    if (aUpdated !== bUpdated) return bUpdated - aUpdated;
+    return a.name.localeCompare(b.name);
+  })[0];
+}
+
+function hasVisibleSheetState(room: LegacyRoom): boolean {
+  return snapshotHasCells(room.snapshot) || room.log.length > 0;
+}
+
+function isFormdataRoom(name: string): boolean {
+  return name.endsWith('_formdata');
+}
+
+function snapshotHasCells(snapshot: string): boolean {
+  return /^cell:[A-Z]+[0-9]+:/m.test(snapshot);
+}
+
+function findLegacyIndexLinkedRoom(
+  rooms: readonly LegacyRoom[],
+): LegacyRoom | undefined {
+  const byName = new Map(rooms.map((room) => [room.name, room]));
+  for (const indexRoom of rooms) {
+    for (const targetName of legacyIndexLocalRoomLinks(indexRoom.snapshot)) {
+      const target = byName.get(targetName);
+      if (
+        target !== undefined &&
+        !isFormdataRoom(target.name) &&
+        hasVisibleSheetState(target)
+      ) {
+        return target;
+      }
+    }
+  }
+  return undefined;
+}
+
+function legacyIndexLocalRoomLinks(snapshot: string): string[] {
+  const cells = parseSnapshotCells(snapshot);
+  const out: string[] = [];
+  for (const [coord, value] of cells) {
+    const pos = parseCoord(coord);
+    if (pos === null || pos.row < 2 || value.startsWith('/') === false) continue;
+    const header = cells.get(`${pos.col}1`);
+    if (header !== '#url') continue;
+    const room = value.slice(1).split(/[?#]/, 1)[0];
+    if (/^[A-Za-z0-9_.=-]+$/.test(room)) out.push(room);
+  }
+  return out;
+}
+
+function parseSnapshotCells(snapshot: string): Map<string, string> {
+  const cells = new Map<string, string>();
+  for (const line of snapshot.split('\n')) {
+    const match = /^cell:([A-Z]+[0-9]+):(.*)$/.exec(line);
+    if (match === null) continue;
+    const value = cellTextValue(match[2] ?? '');
+    if (value !== null) cells.set(match[1] as string, value);
+  }
+  return cells;
+}
+
+function cellTextValue(rest: string): string | null {
+  const parts = rest.split(':');
+  for (let i = 0; i < parts.length - 1; i += 2) {
+    if (parts[i] === 't') return decodeSaveValue(parts[i + 1] as string);
+  }
+  return null;
+}
+
+function decodeSaveValue(value: string): string {
+  return value
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\c/g, ':')
+    .replace(/\\b/g, '\\');
+}
+
+function parseCoord(coord: string): { col: string; row: number } | null {
+  const match = /^([A-Z]+)([0-9]+)$/.exec(coord);
+  if (match === null) return null;
+  return { col: match[1] as string, row: Number(match[2]) };
 }
 
 function parseManifestEntries(manifest: string): string[] {

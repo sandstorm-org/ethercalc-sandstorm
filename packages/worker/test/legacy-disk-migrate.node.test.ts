@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  ensureSandstormDefaultRoom,
   type LegacyDiskMigrationEnv,
   migrateLegacyDisk,
   roomsFromLegacyDumpManifest,
@@ -168,6 +169,276 @@ describe('roomsFromLegacyDumpManifest', () => {
   });
 });
 
+describe('ensureSandstormDefaultRoom', () => {
+  it('keeps an existing visible sheet1 room unchanged', () => {
+    expect(
+      ensureSandstormDefaultRoom([
+        {
+          name: 'other',
+          snapshot: 'version:1.5\ncell:A1:t:other\n',
+          log: [],
+          audit: [],
+          chat: [],
+          ecell: {},
+        },
+        {
+          name: 'sheet1',
+          snapshot: 'version:1.5\ncell:A1:t:sheet1\n',
+          log: [],
+          audit: [],
+          chat: [],
+          ecell: {},
+        },
+      ]),
+    ).toEqual([
+      {
+        name: 'other',
+        snapshot: 'version:1.5\ncell:A1:t:other\n',
+        log: [],
+        audit: [],
+        chat: [],
+        ecell: {},
+      },
+      {
+        name: 'sheet1',
+        snapshot: 'version:1.5\ncell:A1:t:sheet1\n',
+        log: [],
+        audit: [],
+        chat: [],
+        ecell: {},
+      },
+    ]);
+  });
+
+  it('clones the best visible room into sheet1 when sheet1 is absent', () => {
+    expect(
+      ensureSandstormDefaultRoom([
+        {
+          name: 'abc123_formdata',
+          snapshot: 'version:1.5\ncell:A1:t:formdata\n',
+          log: [],
+          audit: [],
+          chat: [],
+          ecell: {},
+          updatedAt: 30,
+        },
+        {
+          name: 'abc123',
+          snapshot: 'version:1.5\ncell:A1:t:sheet\n',
+          log: [],
+          audit: ['audit'],
+          chat: ['chat'],
+          ecell: { alice: 'B2' },
+          updatedAt: 20,
+        },
+      ]),
+    ).toEqual([
+      {
+        name: 'abc123',
+        snapshot: 'version:1.5\ncell:A1:t:sheet\n',
+        log: [],
+        audit: ['audit'],
+        chat: ['chat'],
+        ecell: { alice: 'B2' },
+        updatedAt: 20,
+      },
+      {
+        name: 'abc123_formdata',
+        snapshot: 'version:1.5\ncell:A1:t:formdata\n',
+        log: [],
+        audit: [],
+        chat: [],
+        ecell: {},
+        updatedAt: 30,
+      },
+      {
+        name: 'sheet1',
+        aliasOf: 'abc123',
+        snapshot: 'version:1.5\ncell:A1:t:sheet\n',
+        log: [],
+        audit: ['audit'],
+        chat: ['chat'],
+        ecell: { alice: 'B2' },
+        updatedAt: 20,
+      },
+    ]);
+  });
+
+  it('uses the local sheet linked from a legacy #url/#title index', () => {
+    expect(
+      ensureSandstormDefaultRoom([
+        {
+          name: 'sheet',
+          snapshot: [
+            'version:1.5',
+            'cell:A1:t:#url',
+            'cell:B1:t:#title',
+            'cell:A2:t:/sheet.1',
+            'cell:B2:t:Sheet1',
+            'sheet:c:2:r:2:tvf:1',
+            '',
+          ].join('\n'),
+          log: [],
+          audit: [],
+          chat: [],
+          ecell: {},
+          updatedAt: 20,
+        },
+        {
+          name: 'sheet.1',
+          snapshot: 'version:1.5\ncell:A1:t:real-data\n',
+          log: [],
+          audit: ['real-audit'],
+          chat: [],
+          ecell: {},
+          updatedAt: 10,
+        },
+        {
+          name: 'sheet.1_formdata',
+          snapshot: 'version:1.5\ncell:A1:t:formdata\n',
+          log: [],
+          audit: [],
+          chat: [],
+          ecell: {},
+          updatedAt: 30,
+        },
+      ]),
+    ).toEqual([
+      {
+        name: 'sheet',
+        snapshot: [
+          'version:1.5',
+          'cell:A1:t:#url',
+          'cell:B1:t:#title',
+          'cell:A2:t:/sheet.1',
+          'cell:B2:t:Sheet1',
+          'sheet:c:2:r:2:tvf:1',
+          '',
+        ].join('\n'),
+        log: [],
+        audit: [],
+        chat: [],
+        ecell: {},
+        updatedAt: 20,
+      },
+      {
+        name: 'sheet.1',
+        snapshot: 'version:1.5\ncell:A1:t:real-data\n',
+        log: [],
+        audit: ['real-audit'],
+        chat: [],
+        ecell: {},
+        updatedAt: 10,
+      },
+      {
+        name: 'sheet.1_formdata',
+        snapshot: 'version:1.5\ncell:A1:t:formdata\n',
+        log: [],
+        audit: [],
+        chat: [],
+        ecell: {},
+        updatedAt: 30,
+      },
+      {
+        name: 'sheet1',
+        aliasOf: 'sheet.1',
+        snapshot: 'version:1.5\ncell:A1:t:real-data\n',
+        log: [],
+        audit: ['real-audit'],
+        chat: [],
+        ecell: {},
+        updatedAt: 10,
+      },
+    ]);
+  });
+
+  it('replaces an empty sheet1 with the newest visible non-formdata room', () => {
+    expect(
+      ensureSandstormDefaultRoom([
+        {
+          name: 'older',
+          snapshot: 'version:1.5\ncell:A1:t:older\n',
+          log: [],
+          audit: [],
+          chat: [],
+          ecell: {},
+          updatedAt: 10,
+        },
+        {
+          name: 'sheet1',
+          snapshot: '',
+          log: [],
+          audit: [],
+          chat: [],
+          ecell: {},
+        },
+        {
+          name: 'newer',
+          snapshot: '',
+          log: ['set A1 value n 1'],
+          audit: [],
+          chat: [],
+          ecell: {},
+          updatedAt: 50,
+        },
+      ]),
+    ).toEqual([
+      {
+        name: 'newer',
+        snapshot: '',
+        log: ['set A1 value n 1'],
+        audit: [],
+        chat: [],
+        ecell: {},
+        updatedAt: 50,
+      },
+      {
+        name: 'older',
+        snapshot: 'version:1.5\ncell:A1:t:older\n',
+        log: [],
+        audit: [],
+        chat: [],
+        ecell: {},
+        updatedAt: 10,
+      },
+      {
+        name: 'sheet1',
+        aliasOf: 'newer',
+        snapshot: '',
+        log: ['set A1 value n 1'],
+        audit: [],
+        chat: [],
+        ecell: {},
+        updatedAt: 50,
+      },
+    ]);
+  });
+
+  it('does not create sheet1 when no room has visible spreadsheet state', () => {
+    expect(
+      ensureSandstormDefaultRoom([
+        {
+          name: 'audit-only',
+          snapshot: '',
+          log: [],
+          audit: ['audit'],
+          chat: [],
+          ecell: {},
+        },
+      ]),
+    ).toEqual([
+      {
+        name: 'audit-only',
+        snapshot: '',
+        log: [],
+        audit: ['audit'],
+        chat: [],
+        ecell: {},
+      },
+    ]);
+  });
+});
+
 describe('migrateLegacyDisk', () => {
   it('imports dump.json through DO seed and batches D1 index rows', async () => {
     const seedBodies: unknown[] = [];
@@ -175,7 +446,7 @@ describe('migrateLegacyDisk', () => {
     const env = makeEnv({
       legacyFiles: {
         '/dump.json': JSON.stringify({
-          'snapshot-room': 'save',
+          'snapshot-room': 'version:1.5\ncell:A1:t:save\n',
           'log-room': ['log-ok', 'x'.repeat(121 * 1024)],
           'audit-room': ['ok', 'x'.repeat(121 * 1024)],
           'chat-room': ['chat-ok', 'x'.repeat(121 * 1024)],
@@ -190,12 +461,22 @@ describe('migrateLegacyDisk', () => {
     });
 
     await expect(migrateLegacyDisk(env)).resolves.toEqual({
-      rooms: 1,
+      rooms: 2,
       droppedEntries: 3,
+      roomNames: ['room', 'sheet1<=room'],
     });
     expect(seedBodies).toEqual([
       {
-        snapshot: 'save',
+        snapshot: 'version:1.5\ncell:A1:t:save\n',
+        log: ['log-ok'],
+        audit: ['ok'],
+        chat: ['chat-ok'],
+        ecell: {},
+        updatedAt: 99,
+        skipIndex: true,
+      },
+      {
+        snapshot: 'version:1.5\ncell:A1:t:save\n',
         log: ['log-ok'],
         audit: ['ok'],
         chat: ['chat-ok'],
@@ -204,7 +485,10 @@ describe('migrateLegacyDisk', () => {
         skipIndex: true,
       },
     ]);
-    expect(d1.rows).toEqual([{ room: 'room', updatedAt: 99 }]);
+    expect(d1.rows).toEqual([
+      { room: 'room', updatedAt: 99 },
+      { room: 'sheet1', updatedAt: 99 },
+    ]);
   });
 
   it('falls back to the launcher manifest when dump.json is absent', async () => {
@@ -212,7 +496,7 @@ describe('migrateLegacyDisk', () => {
     const env = makeEnv({
       legacyFiles: {
         '/ethercalc-migrate-manifest.txt': 'snapshot-sheet.txt\n',
-        '/dump/snapshot-sheet.txt': 'save',
+        '/dump/snapshot-sheet.txt': 'version:1.5\ncell:A1:t:save\n',
       },
       onSeed: async (room) => {
         seenRooms.push(room);
@@ -221,10 +505,11 @@ describe('migrateLegacyDisk', () => {
     });
 
     await expect(migrateLegacyDisk(env)).resolves.toEqual({
-      rooms: 1,
+      rooms: 2,
       droppedEntries: 0,
+      roomNames: ['sheet', 'sheet1<=sheet'],
     });
-    expect(seenRooms).toEqual(['sheet']);
+    expect(seenRooms).toEqual(['sheet', 'sheet1']);
   });
 
   it('treats a missing launcher manifest as an empty migration', async () => {
@@ -239,6 +524,7 @@ describe('migrateLegacyDisk', () => {
     await expect(migrateLegacyDisk(env)).resolves.toEqual({
       rooms: 0,
       droppedEntries: 0,
+      roomNames: [],
     });
     expect(seenRooms).toEqual([]);
   });

@@ -166,4 +166,18 @@ describe('socialcalc headless (Phase 1 spike — Plan A)', () => {
     const ss = createSpreadsheet({ snapshot: save });
     expect(ss.exportCSV()).toBe('a,b,c\n1,2,3\n');
   });
+
+  it('createSpreadsheet accepts legacy bare sheet saves', () => {
+    const save = [
+      'version:1.5',
+      'cell:A1:t:legacy',
+      'cell:B1:v:42',
+      'sheet:c:2:r:1:tvf:1',
+      '',
+    ].join('\n');
+
+    const ss = createSpreadsheet({ snapshot: save });
+
+    expect(ss.exportCSV()).toBe('legacy,42\n');
+  });
 });
