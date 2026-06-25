@@ -291,8 +291,8 @@ function legacyIndexLocalRoomLinks(snapshot: string): string[] {
     if (pos === null || pos.row < 2 || value.startsWith('/') === false) continue;
     const header = cells.get(`${pos.col}1`);
     if (header !== '#url') continue;
-    const room = value.slice(1).split(/[?#]/, 1)[0];
-    if (room !== undefined && /^[A-Za-z0-9_.=-]+$/.test(room)) out.push(room);
+    const room = value.slice(1).replace(/[?#].*$/, '');
+    if (/^[A-Za-z0-9_.=-]+$/.test(room)) out.push(room);
   }
   return out;
 }

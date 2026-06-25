@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   ensureSandstormDefaultRoom,
@@ -484,6 +484,241 @@ describe('ensureSandstormDefaultRoom', () => {
         updatedAt: 50,
       },
     ]);
+  });
+
+  it('uses room name order as the final default-room tie breaker', () => {
+    expect(
+      ensureSandstormDefaultRoom([
+        {
+          name: 'bravo',
+          snapshot: 'version:1.5\ncell:A1:t:bravo\n',
+          log: [],
+          audit: [],
+          chat: [],
+          ecell: {},
+        },
+        {
+          name: 'alpha',
+          snapshot: 'version:1.5\ncell:A1:t:alpha\n',
+          log: [],
+          audit: [],
+          chat: [],
+          ecell: {},
+        },
+      ]),
+    ).toEqual([
+      {
+        name: 'alpha',
+        snapshot: 'version:1.5\ncell:A1:t:alpha\n',
+        log: [],
+        audit: [],
+        chat: [],
+        ecell: {},
+      },
+      {
+        name: 'bravo',
+        snapshot: 'version:1.5\ncell:A1:t:bravo\n',
+        log: [],
+        audit: [],
+        chat: [],
+        ecell: {},
+      },
+      {
+        name: 'sheet1',
+        aliasOf: 'alpha',
+        snapshot: 'version:1.5\ncell:A1:t:alpha\n',
+        log: [],
+        audit: [],
+        chat: [],
+        ecell: {},
+      },
+    ]);
+  });
+
+  it('prefers a non-formdata room even when formdata sorts after it', () => {
+    expect(
+      ensureSandstormDefaultRoom([
+        {
+          name: 'visible',
+          snapshot: 'version:1.5\ncell:A1:t:visible\n',
+          log: [],
+          audit: [],
+          chat: [],
+          ecell: {},
+        },
+        {
+          name: 'visible_formdata',
+          snapshot: 'version:1.5\ncell:A1:t:formdata\n',
+          log: [],
+          audit: [],
+          chat: [],
+          ecell: {},
+        },
+      ]),
+    ).toEqual([
+      {
+        name: 'sheet1',
+        aliasOf: 'visible',
+        snapshot: 'version:1.5\ncell:A1:t:visible\n',
+        log: [],
+        audit: [],
+        chat: [],
+        ecell: {},
+      },
+      {
+        name: 'visible',
+        snapshot: 'version:1.5\ncell:A1:t:visible\n',
+        log: [],
+        audit: [],
+        chat: [],
+        ecell: {},
+      },
+      {
+        name: 'visible_formdata',
+        snapshot: 'version:1.5\ncell:A1:t:formdata\n',
+        log: [],
+        audit: [],
+        chat: [],
+        ecell: {},
+      },
+    ]);
+  });
+
+  it('treats snapshot reader failures as empty state', async () => {
+    vi.resetModules();
+    vi.doMock('@ethercalc/socialcalc-headless', () => ({
+      createSpreadsheet: (opts: { readonly snapshot?: string }) => {
+        if (opts.snapshot?.includes('broken') === true) throw new Error('boom');
+        if (opts.snapshot === 'index snapshot') {
+          return {
+            exportCells: () => ({
+              A1: { datavalue: '#url' },
+              A2: { datavalue: '/missing' },
+              B1: { datavalue: '#title' },
+              B2: { datavalue: '/visible' },
+              C1: { datavalue: '#url' },
+              C2: { datavalue: '/bad/room' },
+              D2: { datavalue: '/missing-header' },
+              E1: { datavalue: 42 },
+              F1: null,
+              NotACoord: { datavalue: '/invalid-coordinate' },
+            }),
+          };
+        }
+        return { exportCells: () => ({ A1: { datavalue: 'visible' } }) };
+      },
+    }));
+
+    try {
+      const { ensureSandstormDefaultRoom: ensureWithThrowingReader } = await import(
+        '../src/handlers/legacy-disk-migrate.ts'
+      );
+
+      expect(
+        ensureWithThrowingReader([
+          {
+            name: 'broken',
+            snapshot: 'broken snapshot',
+            log: [],
+            audit: [],
+            chat: [],
+            ecell: {},
+            updatedAt: 50,
+          },
+          {
+            name: 'visible',
+            snapshot: 'visible snapshot',
+            log: [],
+            audit: [],
+            chat: [],
+            ecell: {},
+            updatedAt: 10,
+          },
+        ]),
+      ).toEqual([
+        {
+          name: 'broken',
+          snapshot: 'broken snapshot',
+          log: [],
+          audit: [],
+          chat: [],
+          ecell: {},
+          updatedAt: 50,
+        },
+        {
+          name: 'sheet1',
+          aliasOf: 'visible',
+          snapshot: 'visible snapshot',
+          log: [],
+          audit: [],
+          chat: [],
+          ecell: {},
+          updatedAt: 10,
+        },
+        {
+          name: 'visible',
+          snapshot: 'visible snapshot',
+          log: [],
+          audit: [],
+          chat: [],
+          ecell: {},
+          updatedAt: 10,
+        },
+      ]);
+
+      expect(
+        ensureWithThrowingReader([
+          {
+            name: 'sheet',
+            snapshot: 'index snapshot',
+            log: [],
+            audit: [],
+            chat: [],
+            ecell: {},
+          },
+          {
+            name: 'visible',
+            snapshot: 'visible snapshot',
+            log: [],
+            audit: [],
+            chat: [],
+            ecell: {},
+            updatedAt: 10,
+          },
+        ]),
+      ).toEqual([
+        {
+          name: 'sheet',
+          snapshot: 'index snapshot',
+          log: [],
+          audit: [],
+          chat: [],
+          ecell: {},
+        },
+        {
+          name: 'sheet1',
+          aliasOf: 'visible',
+          snapshot: 'visible snapshot',
+          log: [],
+          audit: [],
+          chat: [],
+          ecell: {},
+          updatedAt: 10,
+        },
+        {
+          name: 'visible',
+          snapshot: 'visible snapshot',
+          log: [],
+          audit: [],
+          chat: [],
+          ecell: {},
+          updatedAt: 10,
+        },
+      ]);
+    } finally {
+      vi.doUnmock('@ethercalc/socialcalc-headless');
+      vi.resetModules();
+    }
   });
 
   it('does not create sheet1 when no room has visible spreadsheet state', () => {
