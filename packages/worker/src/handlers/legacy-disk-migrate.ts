@@ -147,14 +147,12 @@ export async function roomsFromLegacyDumpManifest(
 
 function synthesizeLegacySandstormToc(rooms: readonly LegacyRoom[]): LegacyRoom[] {
   const existingToc = rooms.find((room) => room.name === 'sheet');
-  const sheets = rooms
-    .map((room) => {
-      const match = LEGACY_SANDSTORM_SHEET.exec(room.name);
-      if (match === null) return null;
-      return { room, num: Number(match[1]) };
-    })
-    .filter((entry): entry is { room: LegacyRoom; num: number } => entry !== null)
-    .sort((a, b) => a.num - b.num);
+  const sheets: Array<{ room: LegacyRoom; num: number }> = [];
+  for (const room of rooms) {
+    const match = LEGACY_SANDSTORM_SHEET.exec(room.name);
+    if (match !== null) sheets.push({ room, num: Number(match[1]) });
+  }
+  sheets.sort((a, b) => a.num - b.num);
 
   if (
     existingToc !== undefined &&

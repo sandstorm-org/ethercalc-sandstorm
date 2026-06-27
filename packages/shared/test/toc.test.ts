@@ -8,10 +8,17 @@ describe('parseTocGrid', () => {
     expect(parseTocGrid([])).toEqual([]);
     expect(parseTocGrid([
       'not a row',
+      '/not-an-array-row',
       [12, 'not a link'],
       ['/r.1', 12],
     ])).toEqual([
-      { link: '/r.1', title: 'Sheet3', row: 3 },
+      { link: '/r.1', title: 'Sheet4', row: 4 },
+    ]);
+    expect(parseTocGrid([
+      [12, 'not a header'],
+      ['/r.1', 'One'],
+    ])).toEqual([
+      { link: '/r.1', title: 'One', row: 2 },
     ]);
   });
 
@@ -60,6 +67,21 @@ describe('parseTocGrid', () => {
     ]);
   });
 
+  it('does not replace an earlier custom title or duplicate default title', () => {
+    expect(parseTocGrid([
+      ['/sheet2', 'two'],
+      ['/sheet2', 'Sheet2'],
+      ['/sheet3', 'Sheet3'],
+      ['/sheet3', 'Sheet3'],
+      ['/book.1', 'Sheetnull'],
+      ['/book.1', 'Custom'],
+    ])).toEqual([
+      { link: '/sheet2', title: 'two', row: 1 },
+      { link: '/sheet3', title: 'Sheet3', row: 3 },
+      { link: '/book.1', title: 'Sheetnull', row: 5 },
+    ]);
+  });
+
   it('sorts legacy sheet links before other headerless TOC links', () => {
     expect(parseTocGrid([
       ['/book.2', 'Second'],
@@ -72,6 +94,20 @@ describe('parseTocGrid', () => {
     ]);
   });
 
+  it('only treats exact /sheetN links as legacy numbered sheets', () => {
+    expect(parseTocGrid([
+      ['/x/sheet1', 'Nested'],
+      ['/sheet1x', 'Suffixed'],
+      ['/sheet2', 'Sheet2'],
+      ['/sheet01', 'Padded'],
+    ])).toEqual([
+      { link: '/sheet2', title: 'Sheet2', row: 3 },
+      { link: '/x/sheet1', title: 'Nested', row: 1 },
+      { link: '/sheet1x', title: 'Suffixed', row: 2 },
+      { link: '/sheet01', title: 'Padded', row: 4 },
+    ]);
+  });
+
   it('ignores non-TOC grids', () => {
     expect(parseTocGrid([['A1', 'B1'], ['plain', 'data']])).toEqual([]);
   });
@@ -80,8 +116,25 @@ describe('parseTocGrid', () => {
 describe('parseTocSave', () => {
   it('ignores empty saves and rows without link cells', () => {
     expect(parseTocSave('')).toEqual([]);
-    expect(parseTocSave('cell:B1:t:Title only\ncell:A2:t:/r.1')).toEqual([
-      { link: '/r.1', title: 'Sheet2' },
+    expect(parseTocSave('cell:B1:t:Title only\ncell:A2:t:not a link\ncell:A3:t:/r.1')).toEqual([
+      { link: '/r.1', title: 'Sheet3' },
+    ]);
+  });
+
+  it('parses only strict A/B text cells with numeric rows', () => {
+    const save = [
+      'prefix-cell:A2:t:/bad',
+      'cell:A1:/bad',
+      'cell:A:t:/bad',
+      'cell:A0:t:/bad',
+      'cell:A1x:t:/bad',
+      'cell:C1:t:/bad',
+      'cell:A1:t:/ok',
+      'cell:B1:t:OK',
+    ].join('\n');
+
+    expect(parseTocSave(save)).toEqual([
+      { link: '/ok', title: 'OK' },
     ]);
   });
 
@@ -90,6 +143,18 @@ describe('parseTocSave', () => {
       'cell:A1:t:url',
       'cell:B1:t:title',
       'cell:A2:t:/r.1',
+    ].join('\n');
+
+    expect(parseTocSave(save)).toEqual([
+      { link: '/r.1', title: 'Sheet1' },
+    ]);
+  });
+
+  it('sorts save cells by physical row before detecting headers', () => {
+    const save = [
+      'cell:A2:t:/r.1',
+      'cell:A1:t:url',
+      'cell:B1:t:title',
     ].join('\n');
 
     expect(parseTocSave(save)).toEqual([

@@ -10,7 +10,7 @@ export interface TocEntry {
 }
 
 export function parseTocGrid(body: unknown): TocRow[] {
-  if (!Array.isArray(body) || body.length === 0) return [];
+  if (!Array.isArray(body)) return [];
   const header = body[0];
   const headerLink = Array.isArray(header) && typeof header[0] === 'string'
     ? header[0]
@@ -20,7 +20,8 @@ export function parseTocGrid(body: unknown): TocRow[] {
   const parsed: TocRow[] = [];
   rowsIn.forEach((raw, idx) => {
     if (!Array.isArray(raw)) return;
-    const link = typeof raw[0] === 'string' ? raw[0] : '';
+    if (typeof raw[0] !== 'string') return;
+    const link = raw[0];
     let title = typeof raw[1] === 'string' ? raw[1] : '';
     if (!link.startsWith('/')) return;
     const physicalRow = idx + (hasHeader ? 2 : 1);
@@ -50,7 +51,8 @@ export function parseTocSave(snapshot: string): TocEntry[] {
   const hasHeader = isTocHeaderLink(firstLink);
   const parsed: TocRow[] = [];
   rawRows.slice(hasHeader ? 1 : 0).forEach(([row, cell], idx) => {
-    const link = cell.link ?? '';
+    if (cell.link === undefined) return;
+    const link = cell.link;
     let title = cell.title ?? '';
     if (!link.startsWith('/')) return;
     if (!title) title = fallbackTitle(link, hasHeader ? idx + 1 : row);
@@ -97,10 +99,9 @@ function normalizeHeaderlessLegacyToc(rows: readonly TocRow[]): TocRow[] {
   return Array.from(byLink.values()).sort((a, b) => {
     const left = legacySheetLinkNumber(a.link);
     const right = legacySheetLinkNumber(b.link);
-    if (left !== null && right !== null) return left - right;
-    if (left !== null) return -1;
-    if (right !== null) return 1;
-    return a.row - b.row;
+    const leftRank = left ?? Number.MAX_SAFE_INTEGER;
+    const rightRank = right ?? Number.MAX_SAFE_INTEGER;
+    return leftRank - rightRank;
   });
 }
 
