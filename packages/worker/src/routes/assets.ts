@@ -126,11 +126,10 @@ export function registerAssets(app: Hono<{ Bindings: Env }>): void {
   // Root entry page. Legacy served `index.html` at `/`. We forward to
   // ASSETS which picks it up from the curated dir.
   //
-  // Single-grain deployments (notably Sandstorm, where a grain IS a
-  // single spreadsheet) set `ETHERCALC_DEFAULT_ROOM=sheet1` so `/`
-  // 302-redirects into the live room instead of the "create new sheet"
-  // landing page. Without the env var, the legacy behavior (landing
-  // page) is preserved — this is what ethercalc.net serves.
+  // Single-grain deployments (notably Sandstorm, where a grain is one
+  // workbook) set `ETHERCALC_DEFAULT_ROOM` so `/` redirects into the
+  // workbook instead of the "create new sheet" landing page. Without
+  // the env var, the legacy behavior (landing page) is preserved.
   app.get('/', async (c) => {
     const defaultRoom = c.env.ETHERCALC_DEFAULT_ROOM;
     // Truthiness, not `!== undefined`: workerd delivers an unset
@@ -214,6 +213,11 @@ export function registerAssets(app: Hono<{ Bindings: Env }>): void {
 
   // Catch-all for any other static files (like start.css, jszip.js, etc.)
   app.get('/static/*', async (c) => serveAsset(c.env, c.req.path));
+
+  // Built multi-sheet React app chunks. `/:room` serves
+  // `/multi/index.html` for `=room`, and Vite emits absolute chunk URLs
+  // under `/multi/assets/...`.
+  app.get('/multi/*', async (c) => serveAsset(c.env, c.req.path));
 
   // `/:template/appeditor` — Phase 4.1 panels.html route (§6.1). Ordering:
   // this has a literal `/appeditor` suffix so it can safely register

@@ -1,5 +1,10 @@
+import { createSpreadsheet } from '@ethercalc/socialcalc-headless';
+import { parseTocSave, type TocEntry } from '@ethercalc/shared/toc';
+
 import { encodeRoom } from '../lib/room-name.ts';
 import { bulkMirrorRoomsToD1 } from '../lib/rooms-index.ts';
+import { csvToSocialCalc } from '../lib/csv.ts';
+import { encodeCSV } from '../lib/csv-encode.ts';
 
 const MAX_ENTRY_BYTES = 120 * 1024;
 const INDEX_BATCH_SIZE = 50;
@@ -41,6 +46,7 @@ function emptyAccum(): RoomAccum {
 }
 
 const KEY_PREFIXES = ['snapshot-', 'log-', 'audit-', 'chat-', 'ecell-'] as const;
+const LEGACY_SANDSTORM_SHEET = /^sheet([1-9]\d*)$/;
 
 export function roomsFromLegacyJsonBlob(text: string): LegacyRoom[] {
   const parsed = JSON.parse(text) as Record<string, unknown>;
@@ -74,7 +80,7 @@ export function roomsFromLegacyJsonBlob(text: string): LegacyRoom[] {
   }
 
   const timestamps = parseTimestamps(parsed['timestamps']);
-  return Array.from(rooms.keys())
+  return synthesizeLegacySandstormToc(Array.from(rooms.keys())
     .sort()
     .map((name) => {
       const accum = rooms.get(name) as RoomAccum;
@@ -90,7 +96,7 @@ export function roomsFromLegacyJsonBlob(text: string): LegacyRoom[] {
         ecell: accum.ecell,
         ...(updatedAt !== undefined ? { updatedAt } : {}),
       };
-    });
+    }));
 }
 
 export async function roomsFromLegacyDumpManifest(
@@ -136,7 +142,74 @@ export async function roomsFromLegacyDumpManifest(
       ecell: {},
     });
   }
-  return out;
+  return synthesizeLegacySandstormToc(out);
+}
+
+function synthesizeLegacySandstormToc(rooms: readonly LegacyRoom[]): LegacyRoom[] {
+  const existingToc = rooms.find((room) => room.name === 'sheet');
+  const sheets = rooms
+    .map((room) => {
+      const match = LEGACY_SANDSTORM_SHEET.exec(room.name);
+      if (match === null) return null;
+      return { room, num: Number(match[1]) };
+    })
+    .filter((entry): entry is { room: LegacyRoom; num: number } => entry !== null)
+    .sort((a, b) => a.num - b.num);
+
+  if (
+    existingToc !== undefined &&
+    (existingToc.snapshot !== '' || existingToc.log.length > 0)
+  ) {
+    const normalizedSnapshot = normalizeLegacySandstormTocSnapshot(
+      existingToc.snapshot,
+      existingToc.log,
+    );
+    if (normalizedSnapshot === null) return [...rooms];
+    return [
+      { ...existingToc, snapshot: normalizedSnapshot, log: [] },
+      ...rooms.filter((room) => room.name !== 'sheet'),
+    ].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  if (sheets.length === 0) return [...rooms];
+
+  const rows: TocEntry[] = [];
+  let updatedAt = existingToc?.updatedAt ?? 0;
+  for (const { room, num } of sheets) {
+    rows.push({ link: `/${room.name}`, title: `Sheet${num}` });
+    if (room.updatedAt !== undefined) updatedAt = Math.max(updatedAt, room.updatedAt);
+  }
+
+  return [
+    {
+      name: 'sheet',
+      snapshot: tocSave(rows),
+      log: [],
+      audit: existingToc?.audit ?? [],
+      chat: existingToc?.chat ?? [],
+      ecell: existingToc?.ecell ?? {},
+      updatedAt,
+    },
+    ...rooms.filter((room) => room.name !== 'sheet'),
+  ].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function normalizeLegacySandstormTocSnapshot(
+  snapshot: string,
+  log: readonly string[],
+): string | null {
+  const foldedSnapshot = log.length > 0
+    ? createSpreadsheet(snapshot ? { snapshot, log } : { log }).createSpreadsheetSave()
+    : snapshot;
+  const parsed = parseTocSave(foldedSnapshot);
+  if (parsed.length === 0) return null;
+  return tocSave(parsed);
+}
+
+function tocSave(rows: readonly TocEntry[]): string {
+  return csvToSocialCalc(
+    encodeCSV([['#url', '#title'], ...rows.map((row) => [row.link, row.title])]),
+  );
 }
 
 export async function migrateLegacyDisk(

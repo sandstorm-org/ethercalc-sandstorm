@@ -46,6 +46,7 @@ import {
   renderRoomLinks,
 } from '../lib/rooms-index.ts';
 import { shouldDisableRoomIndex } from '../lib/room-index-access.ts';
+import { isSandstormEnforced } from '../lib/sandstorm-access.ts';
 import type { Env } from '../env.ts';
 
 const TEXT_CT = 'text/plain; charset=utf-8';
@@ -415,13 +416,16 @@ export function registerRoomRoutes(app: Hono<{ Bindings: Env }>): void {
             const targetRoom = cellLine[1]!.replace(/\r?$/, '');
             // SECURITY (H-4): `targetRoom` is read from cell text that any
             // anonymous writer fully controls. The legitimate use is the
-            // multi-sheet editor cascade-deleting one of its OWN sub-sheets,
-            // which are always named `<room>.<n>` (see client-multi
-            // Foldr.ts — the TOC seeds `/${id}.1`). Restrict the rename to
-            // that namespace so a POST can never move/destroy an unrelated
-            // tenant's room. A foreign target is silently ignored, matching
-            // legacy's "proceed with the command regardless" on a no-match.
-            if (targetRoom.startsWith(`${room}.`)) {
+            // multi-sheet editor cascade-deleting one of its OWN sub-sheets.
+            // Public workbooks use `<room>.<n>`. Sandstorm legacy grains
+            // use `sheet<n>` under the fixed `sheet` TOC. Restrict renames
+            // to those namespaces. On public/shared deployments this keeps
+            // a TOC edit from renaming a room outside the current workbook;
+            // on Sandstorm the grain boundary already isolates rooms, but
+            // the same namespace check still documents the intended shape.
+            // A foreign target is silently ignored, matching legacy's
+            // "proceed regardless" on a no-match.
+            if (isOwnMultiSheetRoom(c.env, room, targetRoom)) {
               await doFetch(c.env, targetRoom, '/_do/rename', {
                 method: 'POST',
                 body: JSON.stringify({ to: `${targetRoom}.bak` }),
@@ -478,4 +482,13 @@ export function registerRoomRoutes(app: Hono<{ Bindings: Env }>): void {
       headers: { 'Content-Type': JSON_CT },
     });
   });
+}
+
+function isOwnMultiSheetRoom(env: Env, room: string, targetRoom: string): boolean {
+  if (targetRoom.startsWith(`${room}.`)) return true;
+  return (
+    isSandstormEnforced(env) &&
+    room === 'sheet' &&
+    /^sheet[1-9]\d*$/.test(targetRoom)
+  );
 }

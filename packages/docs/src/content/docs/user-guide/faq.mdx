@@ -43,7 +43,7 @@ For compliance retention, export audit periodically (`/_/:room` save string incl
 
 ## Sandstorm: why don't API room names match tab titles?
 
-Each Sandstorm grain is **one spreadsheet**. The default room is `sheet1` (`ETHERCALC_DEFAULT_ROOM` in `run_grain.sh`), not the display name you gave the grain in the Sandstorm UI.
+Each Sandstorm grain is **one workbook**. The default URL is `/=sheet` (`ETHERCALC_DEFAULT_ROOM="=sheet"` in `run_grain.sh`): room `sheet` stores the tab list, and the first visible sheet is `sheet1`. These API room names are not the display name you gave the grain in the Sandstorm UI.
 
 Multi-sheet workbooks (`/=:room`) use **URL slug ids** from the TOC link column (for example `mybook.2`), not the human-readable tab label. Use `GET /_/:room/cells` or the save string to discover actual ids. See [Sandstorm packaging](https://github.com/audreyt/ethercalc/blob/main/SANDSTORM.md).
 

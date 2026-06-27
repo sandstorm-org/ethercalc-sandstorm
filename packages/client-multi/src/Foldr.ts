@@ -1,18 +1,21 @@
+import { parseTocGrid } from '@ethercalc/shared/toc';
+
 /**
  * Port of `multi/foldr.ls` (`HackFoldr`) from LiveScript/superagent to TS/fetch.
  *
  * Semantics preserved:
  *   - Strip trailing slashes from `base` on construction.
  *   - `fetch(id)` GETs `{base}/_/{id}/csv.json`, drops the header row, and
- *     builds `rows = [{link, title, row}]` for each body row where `link` is
- *     non-empty and not `#…`-prefixed. Missing titles become `SheetN` where
- *     `N = idx+2` in the source sheet (row `2` onwards, matching legacy).
- *   - If the room was never-before-seen (response body empty), the first
- *     write of a row writes two CSV lines (`#url/#title` header + row).
- *   - If the room is known but empty, the first push writes two CSV lines
- *     (header, then row).
- *   - `push(row)` appends a row, POSTs CSV, and updates `row.row` from the
- *     server's returned `paste A<N>` command.
+ *     builds `rows = [{link, title, row}]` for each body row where the link
+ *     is slash-prefixed. Canonical TOCs have a `#…` header in row 1; legacy
+ *     Sandstorm TOCs can be headerless, so parsing preserves physical row
+ *     numbers from whichever row each link occupies. Missing titles become
+ *     `SheetN` where `N` is the physical row number minus one for canonical
+ *     TOCs, or the physical row number for headerless legacy TOCs.
+ *   - If the room was never-before-seen, the first write initializes a
+ *     `#url/#title` TOC header and the first row.
+ *   - If the room is known but empty, the first push writes the first row.
+ *   - `push(row)` appends a row by POSTing explicit SocialCalc commands.
  *   - `setAt(idx, {title})` sends `set B{row} text t {title}` via POST.
  *   - `deleteAt(idx)` sends `set A{row}:B{row} empty multi-cascade`.
  *
@@ -20,19 +23,13 @@
  *
  * Error handling: the legacy code silently ignored POST failures (the
  * superagent callback didn't check status). We preserve that — HTTP errors
- * don't throw, they only prevent the `row.row` update in `push`.
+ * don't throw, and the UI still updates its local TOC optimistically.
  */
 
 export interface FoldrRow {
   link: string;
   title: string;
   row: number;
-}
-
-export interface FoldrPushResponse {
-  // Command server may echo back a `paste A<n>` in the body; legacy reads
-  // `res.body.command[1]`. Its body is sometimes an array (`[status,cmd]`).
-  command?: unknown;
 }
 
 export type FetchImpl = typeof fetch;
@@ -98,7 +95,7 @@ export class HackFoldr {
 
     if (this.rows.length === 0) {
       this.wasEmpty = true;
-      const seed: FoldrRow = { link: `/${this.id}.1`, title: 'Sheet1', row: 2 };
+      const seed: FoldrRow = { link: this.defaultFirstSheetLink(), title: 'Sheet1', row: 2 };
       this.rows = [];
       await this.push(seed);
     }
@@ -114,6 +111,11 @@ export class HackFoldr {
     const body = await this.loadTocJson();
     if (!Array.isArray(body) || body.length === 0) return false;
     const next = parseTocBody(body);
+    // A multi workbook TOC should never have zero sheet rows in normal use
+    // (the UI disables deleting the final tab). If a grain is accidentally
+    // opened as `=plainSheet`, the CSV export is a valid array but not a TOC;
+    // do not let the poller erase the locally seeded tab strip.
+    if (next.length === 0 && this.rows.length > 0) return false;
     if (tocRowsEqual(this.rows, next)) return false;
     this.rows = next;
     return true;
@@ -131,14 +133,10 @@ export class HackFoldr {
 
   /** Append a new row (writes to server, then pushes locally). */
   async push(row: FoldrRow): Promise<this> {
-    await this.initIfNeeded(row);
-    const res = await this.postCsv(row.link, row.title);
-    const command = extractCommand(res);
-    if (typeof command === 'string') {
-      const m = /paste A(\d+) all/.exec(command);
-      if (m) {
-        row.row = parseInt(m[1] as string, 10);
-      }
+    const rowWritten = await this.initIfNeeded(row);
+    if (!rowWritten) {
+      row.row = this.nextTocRow();
+      await this.setTocRow(row.row, row.link, row.title);
     }
     this.rows.push(row);
     return this;
@@ -152,7 +150,7 @@ export class HackFoldr {
     const existing = this.rows[idx];
     if (!existing) return this;
     if (patch.title !== undefined) {
-      await this.sendCmd(`set B${existing.row} text t ${patch.title}`);
+      await this.sendCmd(`set B${existing.row} text t ${encodeForSave(patch.title)}`);
     }
     Object.assign(existing, patch);
     return this;
@@ -184,78 +182,72 @@ export class HackFoldr {
     }
   }
 
-  private async initIfNeeded(row: FoldrRow | null): Promise<void> {
+  private async initIfNeeded(row: FoldrRow | null): Promise<boolean> {
     if (this.wasNonExistent) {
       this.wasNonExistent = false;
       this.wasEmpty = false;
       if (row) {
         row.row = 2;
-        await this.postInitCsv(
-          '#url',
-          '#title',
-          `/${this.id}.1`,
-          'Sheet1',
-          row.link,
-          row.title,
-        );
+        await this.sendCommands([
+          ...tocRowCommands(1, '#url', '#title'),
+          ...tocRowCommands(row.row, row.link, row.title),
+        ]);
+        return true;
       } else {
-        await this.postRawCsv('#url', '#title', `/${this.id}.1`, 'Sheet1');
+        await this.sendCommands([
+          ...tocRowCommands(1, '#url', '#title'),
+          ...tocRowCommands(2, this.defaultFirstSheetLink(), 'Sheet1'),
+        ]);
+        return false;
       }
-      return;
     }
     if (this.wasEmpty) {
       this.wasEmpty = false;
       if (row) {
         row.row = 2;
-        await this.postRawCsv(`/${this.id}.1`, 'Sheet1', row.link, row.title);
+        await this.sendCommands([
+          ...tocRowCommands(1, '#url', '#title'),
+          ...tocRowCommands(row.row, row.link, row.title),
+        ]);
+        return true;
       } else {
-        await this.postCsv(`/${this.id}.1`, 'Sheet1');
+        await this.sendCommands([
+          ...tocRowCommands(1, '#url', '#title'),
+          ...tocRowCommands(2, this.defaultFirstSheetLink(), 'Sheet1'),
+        ]);
+        return false;
       }
-      return;
     }
-    // Nothing to do.
+    return false;
   }
 
-  /** Single-row CSV POST (used for incremental `push` on an existing sheet). */
-  async postCsv(a = '', b = ''): Promise<FoldrPushResponse | null> {
-    const body = `"${escapeCsv(a)}","${escapeCsv(b)}"`;
-    return this.postCsvBody(body);
+  private defaultFirstSheetLink(): string {
+    return this.id === 'sheet' ? '/sheet1' : `/${this.id}.1`;
   }
 
-  /** Two-row CSV POST (header + row for sheets that were empty on load). */
-  async postRawCsv(a = '', b = '', c = '', d = ''): Promise<FoldrPushResponse | null> {
-    const body = `"${escapeCsv(a)}","${escapeCsv(b)}"\n"${escapeCsv(c)}","${escapeCsv(d)}"`;
-    return this.postCsvBody(body);
+  private nextTocRow(): number {
+    const maxRow = this.rows.reduce((max, row) => {
+      return Math.max(max, row.row);
+    }, 1);
+    return Math.max(maxRow + 1, this.rows.length + 2);
   }
 
-  /** Three-row CSV POST used the first time we touch a never-before-existed sheet. */
-  async postInitCsv(
-    a = '',
-    b = '',
-    c = '',
-    d = '',
-    e = '',
-    f = '',
-  ): Promise<FoldrPushResponse | null> {
-    const body = `"${escapeCsv(a)}","${escapeCsv(b)}"\n"${escapeCsv(c)}","${escapeCsv(d)}"\n"${escapeCsv(e)}","${escapeCsv(f)}"`;
-    return this.postCsvBody(body);
+  private async setTocRow(row: number, link: string, title: string): Promise<void> {
+    await this.sendCommands(tocRowCommands(row, link, title));
   }
 
-  private async postCsvBody(body: string): Promise<FoldrPushResponse | null> {
+  private async sendCommands(commands: readonly string[]): Promise<void> {
     try {
-      const res = await this.fetchImpl(`${this.base}/_/${this.id}`, {
+      await this.fetchImpl(`${this.base}/_/${this.id}`, {
         method: 'POST',
         headers: {
-          'content-type': 'text/csv',
+          'content-type': 'application/json',
           accept: 'application/json',
         },
-        body,
+        body: JSON.stringify({ command: commands }),
       });
-      if (!res.ok) return null;
-      const parsed = await res.json().catch(() => null);
-      return parsed as FoldrPushResponse | null;
     } catch {
-      return null;
+      // Legacy swallowed TOC write errors silently.
     }
   }
 }
@@ -265,33 +257,7 @@ export class HackFoldr {
  * Exported for unit tests; `fetch` and `refreshToc` both use this.
  */
 export function parseTocBody(body: unknown): FoldrRow[] {
-  if (!Array.isArray(body) || body.length === 0) return [];
-  const rowsIn = body.slice(1) as unknown[];
-  const parsed: FoldrRow[] = [];
-  rowsIn.forEach((raw, idx) => {
-    if (!Array.isArray(raw)) return;
-    const link = typeof raw[0] === 'string' ? raw[0] : '';
-    let title = typeof raw[1] === 'string' ? raw[1] : '';
-    if (!link || link.startsWith('#')) return;
-    if (!title) title = 'Sheet' + (idx + 1);
-    parsed.push({ link, title, row: idx + 2 });
-  });
-  // Legacy seeding can POST the same link more than once (see FINDINGS.md).
-  // Duplicate React keys made every tab but one vanish on rename (#635); a
-  // stale "Sheet1" row also reappeared as a ghost tab after delete/rename
-  // cycles (#727). Keep one entry per link, preferring the last server row.
-  const byLink = new Map<string, number>();
-  const deduped: FoldrRow[] = [];
-  for (const row of parsed) {
-    const at = byLink.get(row.link);
-    if (at !== undefined) {
-      deduped[at] = row;
-    } else {
-      byLink.set(row.link, deduped.length);
-      deduped.push(row);
-    }
-  }
-  return deduped;
+  return parseTocGrid(body).map(({ link, title, row }) => ({ link, title, row }));
 }
 
 /** Shallow compare of two TOC row lists (link, title, row index). */
@@ -307,18 +273,13 @@ export function tocRowsEqual(a: readonly FoldrRow[], b: readonly FoldrRow[]): bo
   return true;
 }
 
-function escapeCsv(s: string): string {
-  return s.replace(/"/g, '""');
+function tocRowCommands(row: number, link: string, title: string): string[] {
+  return [
+    `set A${row} text t ${encodeForSave(link)}`,
+    `set B${row} text t ${encodeForSave(title)}`,
+  ];
 }
 
-/**
- * The legacy code read `res.body.command[1]` — body.command is an array
- * shaped `[status, commandString]`. Pull the string out defensively.
- */
-function extractCommand(res: FoldrPushResponse | null): string | undefined {
-  if (!res) return undefined;
-  const cmd = res.command;
-  if (Array.isArray(cmd) && typeof cmd[1] === 'string') return cmd[1];
-  if (typeof cmd === 'string') return cmd;
-  return undefined;
+function encodeForSave(s: string): string {
+  return s.replace(/\\/g, '\\b').replace(/:/g, '\\c').replace(/\n/g, '\\n');
 }
