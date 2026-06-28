@@ -62,7 +62,7 @@ const pkgdef :Spk.PackageDefinition = (
       shortDescription = (defaultText = "Multi-user Spreadsheet"),
 
       screenshots = [
-        (width = 478, height = 298, png = embed "static/img/davy/gfx/screenshot.png")
+        (width = 478, height = 298, png = embed "./screenshot.png")
       ],
 
       changeLog = (defaultText = embed "CHANGELOG.mkdn"),
