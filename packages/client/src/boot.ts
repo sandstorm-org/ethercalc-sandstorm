@@ -16,6 +16,12 @@ import { installSanitizeHtml } from './sanitize-html.ts';
 export interface BootHost extends MainHost {
   SocialCalc: MainHost['SocialCalc'];
   doresize?: () => void;
+  addEventListener?: (
+    type: string,
+    listener: () => void,
+    options?: boolean | AddEventListenerOptions,
+  ) => void;
+  requestAnimationFrame?: (callback: FrameRequestCallback) => number;
   document?: {
     addEventListener: (
       type: string,
@@ -54,6 +60,7 @@ export interface BootHost extends MainHost {
     };
   };
   __ETHERCALC_EXPORT_BOUND__?: boolean;
+  __ETHERCALC_RESIZE_BOUND__?: boolean;
   /**
    * Test-only override for the logo-click opener. Production uses a
    * plain anchor click (see `installSocialCalcLogoLink`).
@@ -288,9 +295,25 @@ export function installLegacyExportBindings(host: BootHost): void {
 export function initializeSpreadsheet(host: BootHost): void {
   const w = host as BootHost & Window;
   const { SocialCalc } = host;
-  w.doresize = () => {
+  let resizeFrame: number | null = null;
+  const resizeSpreadsheet = (): void => {
     w.spreadsheet?.DoOnResize?.();
   };
+  w.doresize = () => {
+    if (typeof w.requestAnimationFrame !== 'function') {
+      resizeSpreadsheet();
+      return;
+    }
+    if (resizeFrame !== null) return;
+    resizeFrame = w.requestAnimationFrame(() => {
+      resizeFrame = null;
+      resizeSpreadsheet();
+    });
+  };
+  if (!w.__ETHERCALC_RESIZE_BOUND__ && typeof w.addEventListener === 'function') {
+    w.__ETHERCALC_RESIZE_BOUND__ = true;
+    w.addEventListener('resize', () => w.doresize?.(), { passive: true });
+  }
 
   const existing = SocialCalc.CurrentSpreadsheetControlObject;
   const ss =

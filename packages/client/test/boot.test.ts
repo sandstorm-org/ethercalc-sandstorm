@@ -26,6 +26,8 @@ function makeHost(overrides: Partial<BootHost> = {}): BootHost {
   if (overrides.EtherCalc) host.EtherCalc = overrides.EtherCalc;
   if (overrides.Drupal) host.Drupal = overrides.Drupal;
   if (overrides.document) host.document = overrides.document;
+  if (overrides.addEventListener) host.addEventListener = overrides.addEventListener;
+  if (overrides.requestAnimationFrame) host.requestAnimationFrame = overrides.requestAnimationFrame;
   if (overrides.open) host.__exportOpen = overrides.open;
   if (overrides.parent) host.parent = overrides.parent;
   if (overrides.vex) host.vex = overrides.vex;
@@ -106,6 +108,50 @@ describe('initializeSpreadsheet', () => {
     host.doresize?.();
 
     expect(resize).toHaveBeenCalled();
+  });
+
+  it('binds window resize and coalesces grid resizes per animation frame', () => {
+    let resizeListener: (() => void) | undefined;
+    let animationFrame: FrameRequestCallback | undefined;
+    const host = makeHost({
+      addEventListener: vi.fn((type, listener) => {
+        if (type === 'resize') resizeListener = listener;
+      }),
+      requestAnimationFrame: vi.fn((callback) => {
+        animationFrame = callback;
+        return 1;
+      }),
+    });
+    const ss = makeSpreadsheet();
+    const resize = vi.fn();
+    ss.DoOnResize = resize;
+    host.SocialCalc.Callbacks.broadcast = vi.fn();
+    host.SocialCalc.CurrentSpreadsheetControlObject = ss;
+
+    initializeSpreadsheet(host);
+    resizeListener?.();
+    resizeListener?.();
+
+    expect(host.requestAnimationFrame).toHaveBeenCalledTimes(1);
+    expect(resize).not.toHaveBeenCalled();
+
+    animationFrame?.(0);
+
+    expect(resize).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not bind duplicate window resize listeners', () => {
+    const host = makeHost({
+      addEventListener: vi.fn(),
+    });
+    const ss = makeSpreadsheet();
+    host.SocialCalc.Callbacks.broadcast = vi.fn();
+    host.SocialCalc.CurrentSpreadsheetControlObject = ss;
+
+    initializeSpreadsheet(host);
+    initializeSpreadsheet(host);
+
+    expect(host.addEventListener).toHaveBeenCalledTimes(1);
   });
 
   it('requests formdata first when a formDataViewer is present', () => {

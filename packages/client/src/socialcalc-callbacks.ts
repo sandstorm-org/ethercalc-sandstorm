@@ -118,8 +118,8 @@ export function installCallbacks(
   const origSize = SocialCalc.SizeSSDiv;
   if (origSize) SocialCalc.OrigSizeSSDiv = origSize;
   SocialCalc.SizeSSDiv = (spreadsheet) => {
-    if (!spreadsheet || !spreadsheet.parentNode) return;
-    origSize?.(spreadsheet);
+    if (!spreadsheet || !spreadsheet.parentNode) return false;
+    return origSize?.(spreadsheet) ?? false;
   };
 
   // 4. Rewrite ScheduleSheetCommands — broadcast every user action.
