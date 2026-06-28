@@ -166,8 +166,8 @@ export interface SocialCalcGlobal {
   OrigDoPositionCalculations?: (...args: unknown[]) => unknown;
   LoadEditorSettings?: (editor: EditorObject, str: string, flags: unknown) => void;
   OrigLoadEditorSettings?: (editor: EditorObject, str: string, flags: unknown) => void;
-  SizeSSDiv?: (spreadsheet: { parentNode?: unknown } | undefined) => void;
-  OrigSizeSSDiv?: (spreadsheet: { parentNode?: unknown } | undefined) => void;
+  SizeSSDiv?: (spreadsheet: { parentNode?: unknown } | undefined) => boolean | undefined;
+  OrigSizeSSDiv?: (spreadsheet: { parentNode?: unknown } | undefined) => boolean | undefined;
   ScheduleSheetCommands?: (
     sheet: SheetObject,
     cmdstr: string,

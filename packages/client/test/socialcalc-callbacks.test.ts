@@ -114,16 +114,17 @@ describe('installCallbacks', () => {
     expect(editor.SettingsCallbacks['ethercalc']).toBeDefined();
   });
 
-  it('SizeSSDiv guards null / missing parentNode', () => {
+  it('SizeSSDiv guards null / missing parentNode and preserves original return', () => {
     const sc = makeSocialCalc();
     let inner = 0;
     sc.SizeSSDiv = () => {
       inner++;
+      return true;
     };
     installCallbacks(sc, { broadcast: () => {} });
-    sc.SizeSSDiv!(undefined);
-    sc.SizeSSDiv!({});
-    sc.SizeSSDiv!({ parentNode: {} });
+    expect(sc.SizeSSDiv!(undefined)).toBe(false);
+    expect(sc.SizeSSDiv!({})).toBe(false);
+    expect(sc.SizeSSDiv!({ parentNode: {} })).toBe(true);
     expect(inner).toBe(1);
   });
 
@@ -131,7 +132,7 @@ describe('installCallbacks', () => {
     const sc = makeSocialCalc();
     delete sc.SizeSSDiv;
     installCallbacks(sc, { broadcast: () => {} });
-    expect(() => sc.SizeSSDiv!({ parentNode: {} })).not.toThrow();
+    expect(sc.SizeSSDiv!({ parentNode: {} })).toBe(false);
   });
 
   it('ScheduleSheetCommands collapses blank lines, skips whitespace commands, broadcasts non-remote', () => {
