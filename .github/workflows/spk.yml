@@ -1,0 +1,24 @@
+name: Build SPK
+
+on: push
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: spk-${{ github.event_name }}-${{ github.ref }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  build-test-spk:
+    name: Build Test SPK
+    uses: ./.github/workflows/spk-build-reusable.yml
+    with:
+      environment_name: test-spk
+      pack_mode: test
+      spk_output_path: build/ethercalc-test-${{ github.event.pull_request.head.sha || github.sha }}.spk
+      artifact_name: ethercalc-test-spk-${{ github.event.pull_request.head.sha || github.sha }}
+    secrets:
+      sandstorm_keyring_b64: ${{ secrets.SANDSTORM_TEST_KEYRING_B64 }}

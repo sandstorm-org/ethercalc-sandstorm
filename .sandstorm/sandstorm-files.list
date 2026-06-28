@@ -2,11 +2,6 @@
 # This file is automatically updated and rewritten in sorted order every time
 # the app runs in dev mode. You may manually add or remove files, but don't
 # expect comments or ordering to be retained.
-CHANGELOG.mkdn
-DESCRIPTION.mkdn
-app-graphics/ethercalc-128.svg
-app-graphics/ethercalc-150.svg
-app-graphics/ethercalc-24.svg
 bin
 etc/gai.conf
 etc/host.conf
@@ -19,6 +14,7 @@ etc/resolv.conf
 etc/ssl/openssl.cnf
 lib
 lib64
+opt/app/.sandstorm/run_grain.sh
 opt/app/dist/app.js
 opt/app/dist/app.js.map
 opt/app/images/sc_1x1.gif
@@ -149,11 +145,8 @@ opt/app/static/socket.io.js
 opt/app/static/vex-theme-flat-attack.css
 opt/app/static/vex.css
 opt/app/static/xlsx.core.min.js
-pgp-keyring
-pgp-signature
 proc/cpuinfo
 run/systemd/resolve/stub-resolv.conf
-run_grain.sh
 sandstorm-http-bridge
 sandstorm-http-bridge-config
 sandstorm-manifest
