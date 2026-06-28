@@ -14,7 +14,9 @@ jQuery(document).ready(function() {
 
             jQuery('#SocialCalc-commenttools textarea, #SocialCalc-clipboardview textarea').addClass('form-control');
 
-            jQuery('#SocialCalc-formulafunctions').prev().addClass('form-control input-sm');
+            jQuery('#SocialCalc-formulafunctions').prev()
+                .addClass('form-control input-sm')
+                .parent().addClass('socialcalc-formula-bar');
             jQuery('#searchbarinput').addClass('form-control input-sm');
 
             jQuery('#SocialCalc-settings-savecell, #SocialCalc-settings-savesheet, input[value="OK"], input[value="Live Form"]')
