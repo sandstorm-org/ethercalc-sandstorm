@@ -377,6 +377,57 @@ describe('POST /_/:room — command execution', () => {
     expect(dispatch!.bodyText).toBe('set A5:B3 empty multi-cascade');
   });
 
+  it('multi-cascade: renames Sandstorm sheetN sub-sheets from the sheet TOC', async () => {
+    const { env, calls } = makeFakeRoomNamespace((call) => {
+      if (call.url.includes('/_do/snapshot') && call.method === 'GET') {
+        return new Response(
+          'version:1.5\n' +
+            'sheet:c:2:r:5:tvf:g\n' +
+            'cell:A5:t:/sheet2\n',
+          { status: 200 },
+        );
+      }
+      return new Response(null, { status: 202 });
+    });
+    const sandstormEnv = { ...env, ETHERCALC_SANDSTORM: '1' } as Env;
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request('https://t.test/_/sheet', {
+        method: 'POST',
+        headers: {
+          'content-type': 'text/x-socialcalc',
+          'X-Sandstorm-Permissions': 'modify',
+        },
+        body: 'set A5:B3 empty multi-cascade',
+      }),
+      sandstormEnv as never,
+    );
+    expect(res.status).toBe(202);
+    const renameCall = calls.find((c) => c.url.includes('/_do/rename'));
+    expect(renameCall).toBeDefined();
+    expect(JSON.parse(renameCall!.bodyText!)).toEqual({ to: 'sheet2.bak' });
+  });
+
+  it('multi-cascade: does NOT rename sheetN outside Sandstorm', async () => {
+    const { env, calls } = makeFakeRoomNamespace((call) => {
+      if (call.url.includes('/_do/snapshot') && call.method === 'GET') {
+        return new Response('version:1.5\nsheet:c:2:r:5:tvf:g\ncell:A5:t:/sheet2\n');
+      }
+      return new Response(null, { status: 202 });
+    });
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request('https://t.test/_/sheet', {
+        method: 'POST',
+        headers: { 'content-type': 'text/x-socialcalc' },
+        body: 'set A5:B3 empty multi-cascade',
+      }),
+      env as never,
+    );
+    expect(res.status).toBe(202);
+    expect(calls.find((c) => c.url.includes('/_do/rename'))).toBeUndefined();
+  });
+
   it('multi-cascade: does NOT rename a prefix-sibling that is not a sub-room', async () => {
     // `r-evil` shares the literal prefix `r` but is NOT `r.<...>`; the
     // dot-boundary check must reject it.

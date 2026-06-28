@@ -467,4 +467,49 @@ describe('Phase 8.1 exports — multi-sheet', () => {
     expect(wb.Sheets['SecondTab'].A1.v).toBe(20);
     /* eslint-enable @typescript-eslint/no-explicit-any */
   });
+
+  it('GET /_/=sheet/xlsx normalizes legacy headerless Sandstorm TOCs', async () => {
+    const e = env as unknown as Env;
+
+    for (let i = 1; i <= 3; i++) {
+      const subId = e.ROOM.idFromName(encodeURI(`sheet${i}`));
+      const sub = e.ROOM.get(subId);
+      await sub.fetch('https://do/_do/all', { method: 'DELETE' });
+      await sub.fetch('https://do/_do/snapshot', { method: 'PUT', body: '' });
+      await sub.fetch('https://do/_do/commands', {
+        method: 'POST',
+        body: `set A1 value n ${i * 10}`,
+      });
+    }
+
+    const tocId = e.ROOM.idFromName(encodeURI('sheet'));
+    const toc = e.ROOM.get(tocId);
+    await toc.fetch('https://do/_do/all', { method: 'DELETE' });
+    await toc.fetch('https://do/_do/snapshot', { method: 'PUT', body: '' });
+    const tocCmds = [
+      'set A1 text t /sheet2',
+      'set B1 text t two',
+      'set A2 text t /sheet1',
+      'set B2 text t Sheet1',
+      'set A3 text t /sheet2',
+      'set B3 text t Sheet2',
+      'set A4 text t /sheet3',
+      'set B4 text t Sheet3',
+    ];
+    for (const c of tocCmds) {
+      await toc.fetch('https://do/_do/commands', { method: 'POST', body: c });
+    }
+
+    const res = await request('GET', '/_/=sheet/xlsx');
+    expect(res.status).toBe(200);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    const XLSX = await import('@e965/xlsx');
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    const wb = (XLSX as any).read(bytes, { type: 'array' });
+    expect(wb.SheetNames).toEqual(['Sheet1', 'two', 'Sheet3']);
+    expect(wb.Sheets['Sheet1'].A1.v).toBe(10);
+    expect(wb.Sheets.two.A1.v).toBe(20);
+    expect(wb.Sheets['Sheet3'].A1.v).toBe(30);
+    /* eslint-enable @typescript-eslint/no-explicit-any */
+  });
 });

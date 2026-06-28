@@ -43,13 +43,12 @@ STARTUP_START_MS="$(now_ms)"
 APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$APP_DIR"
 
-# Each Sandstorm grain IS a single spreadsheet — `/` should land in
-# the live sheet, not the ethercalc.net "create new" landing. The
-# legacy LiveScript EtherCalc initialized a `sheet1` room on grain
-# creation; we point `/` at the same name so existing grains upgrade
-# seamlessly (the migrated `/var/dump.json` content is under
-# `sheet1`).
-export ETHERCALC_DEFAULT_ROOM="sheet1"
+# Each Sandstorm grain is one workbook. `/=sheet` opens the multi-sheet
+# shell; room `sheet` stores the tab TOC, and the first visible sheet is
+# `/sheet1`. Legacy grain data migrated from `/var/dump*` still lands in
+# `sheet1`, so the TOC points existing grains at their preserved sheet.
+export ETHERCALC_DEFAULT_ROOM="=sheet"
+export ETHERCALC_SANDSTORM="1"
 # HOME/TMPDIR are grain-writable fallbacks for tooling that expects
 # them. The launcher itself uses prebuilt runtime artifacts.
 export HOME="/var/home"

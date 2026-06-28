@@ -43,6 +43,11 @@ function makeFetch(
   return { fetchImpl, calls };
 }
 
+function postedCommands(call: FakeRequest | undefined): string[] {
+  if (!call?.body) return [];
+  return (JSON.parse(call.body) as { command: string[] }).command;
+}
+
 describe('HackFoldr', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -99,6 +104,26 @@ describe('HackFoldr', () => {
       ]);
     });
 
+    it('parses legacy headerless Sandstorm TOCs', async () => {
+      const { fetchImpl } = makeFetch([
+        {
+          json: [
+            ['/sheet2', 'two'],
+            ['/sheet1', 'Sheet1'],
+            ['/sheet2', 'Sheet2'],
+            ['/sheet3', 'Sheet3'],
+          ],
+        },
+      ]);
+      const f = new HackFoldr('http://x', { fetchImpl });
+      await f.fetch('sheet');
+      expect(f.rows).toEqual([
+        { link: '/sheet1', title: 'Sheet1', row: 2 },
+        { link: '/sheet2', title: 'two', row: 1 },
+        { link: '/sheet3', title: 'Sheet3', row: 4 },
+      ]);
+    });
+
     it('skips rows without a link and rows starting with #', async () => {
       const { fetchImpl } = makeFetch([
         {
@@ -143,39 +168,73 @@ describe('HackFoldr', () => {
     });
 
     it('marks was-non-existent when the response is empty, and seeds Sheet1', async () => {
-      // Three calls total: GET → POST init-csv (3 rows) → POST csv (single row).
-      // The legacy code deliberately re-posts the seed row via the outer push.
       const { fetchImpl, calls } = makeFetch([
         { json: [] }, // empty body → non-existent
-        { ok: true, json: null }, // init-csv (3 rows)
-        { ok: true, json: null }, // post-csv follow-up
+        { ok: true, json: null }, // TOC init commands
       ]);
       const f = new HackFoldr('http://x', { fetchImpl });
       await f.fetch('r');
       expect(f.rows).toEqual([{ link: '/r.1', title: 'Sheet1', row: 2 }]);
       expect(f.wasNonExistent).toBe(false);
       expect(f.wasEmpty).toBe(false);
-      expect(calls).toHaveLength(3);
+      expect(calls).toHaveLength(2);
       expect(calls[1]?.method).toBe('POST');
-      expect(calls[1]?.body).toContain('"#url","#title"');
-      expect(calls[1]?.body).toContain('"/r.1","Sheet1"');
-      expect(calls[2]?.body).toBe('"/r.1","Sheet1"');
+      expect(calls[1]?.headers).toMatchObject({ 'content-type': 'application/json' });
+      expect(postedCommands(calls[1])).toEqual([
+        'set A1 text t #url',
+        'set B1 text t #title',
+        'set A2 text t /r.1',
+        'set B2 text t Sheet1',
+      ]);
+    });
+
+    it('seeds the Sandstorm workbook TOC room with /sheet1', async () => {
+      const { fetchImpl, calls } = makeFetch([
+        { json: [] },
+        { ok: true, json: null },
+      ]);
+      const f = new HackFoldr('http://x', { fetchImpl });
+      await f.fetch('sheet');
+      expect(f.rows).toEqual([{ link: '/sheet1', title: 'Sheet1', row: 2 }]);
+      expect(postedCommands(calls[1])).toEqual([
+        'set A1 text t #url',
+        'set B1 text t #title',
+        'set A2 text t /sheet1',
+        'set B2 text t Sheet1',
+      ]);
     });
 
     it('marks was-empty when the TOC response has only a header', async () => {
       const { fetchImpl, calls } = makeFetch([
         { json: [['#url', '#title']] },
-        { ok: true, json: null }, // post-raw-csv (2 rows)
-        { ok: true, json: null }, // post-csv follow-up
+        { ok: true, json: null }, // first TOC row commands
       ]);
       const f = new HackFoldr('http://x', { fetchImpl });
       await f.fetch('r');
       expect(f.rows).toEqual([{ link: '/r.1', title: 'Sheet1', row: 2 }]);
       expect(f.wasEmpty).toBe(false);
-      // The init POST writes the seed row twice (header-free since wasEmpty
-      // is the "have-TOC-but-empty" case → post-raw-csv without the #header).
-      expect(calls[1]?.body).toBe('"/r.1","Sheet1"\n"/r.1","Sheet1"');
-      expect(calls[2]?.body).toBe('"/r.1","Sheet1"');
+      expect(postedCommands(calls[1])).toEqual([
+        'set A1 text t #url',
+        'set B1 text t #title',
+        'set A2 text t /r.1',
+        'set B2 text t Sheet1',
+      ]);
+    });
+
+    it('initializes header and Sheet1 when an empty TOC exports as a blank grid', async () => {
+      const { fetchImpl, calls } = makeFetch([
+        { json: [['']] },
+        { ok: true, json: null },
+      ]);
+      const f = new HackFoldr('http://x', { fetchImpl });
+      await f.fetch('sheet');
+      expect(f.rows).toEqual([{ link: '/sheet1', title: 'Sheet1', row: 2 }]);
+      expect(postedCommands(calls[1])).toEqual([
+        'set A1 text t #url',
+        'set B1 text t #title',
+        'set A2 text t /sheet1',
+        'set B2 text t Sheet1',
+      ]);
     });
 
     it('survives a thrown fetch (treats as non-existent)', async () => {
@@ -229,76 +288,56 @@ describe('HackFoldr', () => {
   });
 
   describe('push()', () => {
-    it('posts a single-row CSV and picks up row from the server paste command', async () => {
+    it('posts explicit TOC cell commands and chooses the next row locally', async () => {
       const { fetchImpl, calls } = makeFetch([
         { json: [['#', '#'], ['/a', 'A']] }, // fetch
-        { ok: true, json: { command: [0, 'paste A7 all'] } }, // post-csv
+        { ok: true, json: null }, // TOC command write
       ]);
       const f = new HackFoldr('http://x', { fetchImpl });
       await f.fetch('r');
       await f.push({ link: '/new', title: 'New', row: 0 });
-      expect(calls[1]?.headers).toMatchObject({ 'content-type': 'text/csv' });
-      expect(calls[1]?.body).toBe('"/new","New"');
-      expect(f.rows[1]).toMatchObject({ link: '/new', title: 'New', row: 7 });
+      expect(calls[1]?.headers).toMatchObject({ 'content-type': 'application/json' });
+      expect(postedCommands(calls[1])).toEqual([
+        'set A3 text t /new',
+        'set B3 text t New',
+      ]);
+      expect(f.rows[1]).toMatchObject({ link: '/new', title: 'New', row: 3 });
     });
 
-    it('falls back to existing row.row when server returns no paste command', async () => {
-      const { fetchImpl } = makeFetch([
-        { json: [['#', '#'], ['/a', 'A']] },
-        { ok: true, json: {} }, // no command
+    it('chooses the next physical row after deduped ghost rows', async () => {
+      const { fetchImpl, calls } = makeFetch([
+        {
+          json: [
+            ['#url', '#title'],
+            ['/r.1', 'Old'],
+            ['/r.2', 'Second'],
+            ['/r.1', 'First'],
+          ],
+        },
+        { ok: true, json: null },
       ]);
       const f = new HackFoldr('http://x', { fetchImpl });
       await f.fetch('r');
-      await f.push({ link: '/new', title: 'New', row: 42 });
-      expect(f.rows[1]).toMatchObject({ row: 42 });
-    });
-
-    it('honors a string command (not an array)', async () => {
-      const { fetchImpl } = makeFetch([
-        { json: [['#', '#'], ['/a', 'A']] },
-        { ok: true, json: { command: 'paste A9 all' } },
+      await f.push({ link: '/r.3', title: 'Third', row: 0 });
+      expect(postedCommands(calls[1])).toEqual([
+        'set A5 text t /r.3',
+        'set B5 text t Third',
       ]);
-      const f = new HackFoldr('http://x', { fetchImpl });
-      await f.fetch('r');
-      await f.push({ link: '/n', title: 'N', row: 0 });
-      // Non-[status, cmd] arrays don't match; only string passes through.
-      expect(f.rows[1]?.row).toBe(9);
+      expect(f.rows[2]).toMatchObject({ link: '/r.3', title: 'Third', row: 5 });
     });
 
-    it('ignores array commands where [1] is not a string', async () => {
-      const { fetchImpl } = makeFetch([
-        { json: [['#', '#'], ['/a', 'A']] },
-        { ok: true, json: { command: [0, 123] } },
-      ]);
-      const f = new HackFoldr('http://x', { fetchImpl });
-      await f.fetch('r');
-      await f.push({ link: '/n', title: 'N', row: 55 });
-      expect(f.rows[1]?.row).toBe(55);
-    });
-
-    it('ignores command strings that do not match the paste regex', async () => {
-      const { fetchImpl } = makeFetch([
-        { json: [['#', '#'], ['/a', 'A']] },
-        { ok: true, json: { command: [0, 'set A1 value 1'] } }, // not `paste A<n>`
-      ]);
-      const f = new HackFoldr('http://x', { fetchImpl });
-      await f.fetch('r');
-      await f.push({ link: '/n', title: 'N', row: 77 });
-      expect(f.rows[1]?.row).toBe(77);
-    });
-
-    it('survives a POST !ok (no paste update, row still appended)', async () => {
+    it('survives a POST !ok and still appends locally', async () => {
       const { fetchImpl } = makeFetch([
         { json: [['#', '#'], ['/a', 'A']] },
         { ok: false },
       ]);
       const f = new HackFoldr('http://x', { fetchImpl });
       await f.fetch('r');
-      await f.push({ link: '/n', title: 'N', row: 3 });
+      await f.push({ link: '/n', title: 'N', row: 0 });
       expect(f.rows[1]).toMatchObject({ row: 3 });
     });
 
-    it('survives a POST throw (no paste update, row still appended)', async () => {
+    it('survives a POST throw and still appends locally', async () => {
       const { fetchImpl } = makeFetch([
         { json: [['#', '#'], ['/a', 'A']] },
         { throwError: true },
@@ -309,44 +348,40 @@ describe('HackFoldr', () => {
       expect(f.rows[1]).toMatchObject({ row: 3 });
     });
 
-    it('survives a POST whose body fails to json-parse', async () => {
-      const { fetchImpl } = makeFetch([
-        { json: [['#', '#'], ['/a', 'A']] },
-        { ok: true, json: '__THROW__' },
-      ]);
-      const f = new HackFoldr('http://x', { fetchImpl });
-      await f.fetch('r');
-      await f.push({ link: '/n', title: 'N', row: 3 });
-      expect(f.rows[1]).toMatchObject({ row: 3 });
-    });
-
-    it('double-row POST when pushing the first row of an empty room', async () => {
-      // A fetch-from-empty room calls init → push internally, so by the time
-      // the user invokes push({X}), was-empty is already cleared.
+    it('posts a seed row, then appends after it, when pushing after an empty room fetch', async () => {
       const { fetchImpl, calls } = makeFetch([
         { json: [['#url', '#title']] }, // empty
-        { ok: true, json: null }, // init post-raw-csv (2 rows)
-        { ok: true, json: null }, // init follow-up post-csv
-        { ok: true, json: { command: [0, 'paste A4 all'] } }, // push
+        { ok: true, json: null }, // seed row
+        { ok: true, json: null }, // push
       ]);
       const f = new HackFoldr('http://x', { fetchImpl });
       await f.fetch('r');
       await f.push({ link: '/x', title: 'X', row: 0 });
-      expect(calls[1]?.body).toBe('"/r.1","Sheet1"\n"/r.1","Sheet1"');
-      expect(calls[2]?.body).toBe('"/r.1","Sheet1"');
-      expect(calls[3]?.body).toBe('"/x","X"');
-      expect(f.rows[1]).toMatchObject({ row: 4 });
+      expect(postedCommands(calls[1])).toEqual([
+        'set A1 text t #url',
+        'set B1 text t #title',
+        'set A2 text t /r.1',
+        'set B2 text t Sheet1',
+      ]);
+      expect(postedCommands(calls[2])).toEqual([
+        'set A3 text t /x',
+        'set B3 text t X',
+      ]);
+      expect(f.rows[1]).toMatchObject({ row: 3 });
     });
 
-    it('escapes double-quotes in CSV payloads', async () => {
+    it('encodes SocialCalc command values', async () => {
       const { fetchImpl, calls } = makeFetch([
         { json: [['#', '#'], ['/a', 'A']] },
         { ok: true, json: null },
       ]);
       const f = new HackFoldr('http://x', { fetchImpl });
       await f.fetch('r');
-      await f.push({ link: '/a"b', title: 'T"t', row: 0 });
-      expect(calls[1]?.body).toBe('"/a""b","T""t"');
+      await f.push({ link: '/a:b\\c', title: 'T:t\\x\nz', row: 0 });
+      expect(postedCommands(calls[1])).toEqual([
+        'set A3 text t /a\\cb\\bc',
+        'set B3 text t T\\ct\\bx\\nz',
+      ]);
     });
   });
 
@@ -358,9 +393,9 @@ describe('HackFoldr', () => {
       ]);
       const f = new HackFoldr('http://x', { fetchImpl });
       await f.fetch('r');
-      await f.setAt(0, { title: 'Renamed' });
-      expect(calls[1]?.body).toBe('set B2 text t Renamed');
-      expect(f.at(0)).toMatchObject({ title: 'Renamed' });
+      await f.setAt(0, { title: 'Re:n\\amed\nx' });
+      expect(calls[1]?.body).toBe('set B2 text t Re\\cn\\bamed\\nx');
+      expect(f.at(0)).toMatchObject({ title: 'Re:n\\amed\nx' });
     });
 
     it('skips the command when no title patch is given', async () => {
@@ -424,27 +459,26 @@ describe('HackFoldr', () => {
   });
 
   describe('was-non-existent init flow', () => {
-    it('on first push after non-existent state, writes a 3-row init + 1-row follow-up', async () => {
-      // The fetch() on a never-seen room runs the full seed flow:
-      //   GET → POST init-csv (3 rows: #url/#title, /r.1/Sheet1, /r.1/Sheet1)
-      //       → POST csv (1 row: /r.1, Sheet1)
-      // After that, was-non-existent and was-empty are cleared; the user's
-      // subsequent push(/fresh) is a plain single-row POST.
+    it('on first push after non-existent state, initializes TOC and appends after it', async () => {
       const { fetchImpl, calls } = makeFetch([
         { json: [] },
         { ok: true, json: null },
         { ok: true, json: null },
-        { ok: true, json: { command: [0, 'paste A5 all'] } },
       ]);
       const f = new HackFoldr('http://x', { fetchImpl });
       await f.fetch('r');
       await f.push({ link: '/fresh', title: 'Fresh', row: 0 });
-      expect(calls[1]?.body).toBe(
-        '"#url","#title"\n"/r.1","Sheet1"\n"/r.1","Sheet1"',
-      );
-      expect(calls[2]?.body).toBe('"/r.1","Sheet1"');
-      expect(calls[3]?.body).toBe('"/fresh","Fresh"');
-      expect(f.rows[1]?.row).toBe(5);
+      expect(postedCommands(calls[1])).toEqual([
+        'set A1 text t #url',
+        'set B1 text t #title',
+        'set A2 text t /r.1',
+        'set B2 text t Sheet1',
+      ]);
+      expect(postedCommands(calls[2])).toEqual([
+        'set A3 text t /fresh',
+        'set B3 text t Fresh',
+      ]);
+      expect(f.rows[1]?.row).toBe(3);
     });
 
     it('sendCmd triggers lazy init when sheet was non-existent (no row)', async () => {
@@ -452,78 +486,38 @@ describe('HackFoldr', () => {
       // true — which can only happen if a caller invokes `sendCmd` or `push`
       // before `fetch` settled. We set the flags by hand to exercise it.
       const { fetchImpl, calls } = makeFetch([
-        { ok: true, json: null }, // init post-raw-csv
+        { ok: true, json: null }, // lazy TOC init
         { ok: true, json: null }, // sendCmd post
       ]);
       const f = new HackFoldr('http://x', { fetchImpl });
       f.id = 'r';
       f.wasNonExistent = true;
       await f.sendCmd('noop');
-      expect(calls[0]?.body).toBe('"#url","#title"\n"/r.1","Sheet1"');
+      expect(postedCommands(calls[0])).toEqual([
+        'set A1 text t #url',
+        'set B1 text t #title',
+        'set A2 text t /r.1',
+        'set B2 text t Sheet1',
+      ]);
       expect(calls[1]?.body).toBe('noop');
     });
 
     it('sendCmd triggers lazy init when sheet was empty (no row)', async () => {
       const { fetchImpl, calls } = makeFetch([
-        { ok: true, json: null }, // init post-csv (single row)
+        { ok: true, json: null }, // lazy first-row init
         { ok: true, json: null }, // sendCmd post
       ]);
       const f = new HackFoldr('http://x', { fetchImpl });
       f.id = 'r';
       f.wasEmpty = true;
       await f.sendCmd('noop');
-      expect(calls[0]?.body).toBe('"/r.1","Sheet1"');
+      expect(postedCommands(calls[0])).toEqual([
+        'set A1 text t #url',
+        'set B1 text t #title',
+        'set A2 text t /r.1',
+        'set B2 text t Sheet1',
+      ]);
       expect(calls[1]?.body).toBe('noop');
-    });
-  });
-
-  describe('postCsv failure branches', () => {
-    it('returns null when the POST throws', async () => {
-      const { fetchImpl } = makeFetch([{ throwError: true }]);
-      const f = new HackFoldr('http://x', { fetchImpl });
-      f.id = 'r';
-      const out = await f.postCsv('a', 'b');
-      expect(out).toBeNull();
-    });
-
-    it('returns null when response is !ok', async () => {
-      const { fetchImpl } = makeFetch([{ ok: false }]);
-      const f = new HackFoldr('http://x', { fetchImpl });
-      f.id = 'r';
-      const out = await f.postCsv('a', 'b');
-      expect(out).toBeNull();
-    });
-
-    it('returns parsed body when !json still resolves', async () => {
-      const { fetchImpl } = makeFetch([{ ok: true, json: { command: 'x' } }]);
-      const f = new HackFoldr('http://x', { fetchImpl });
-      f.id = 'r';
-      const out = await f.postCsv('a', 'b');
-      expect(out).toEqual({ command: 'x' });
-    });
-
-    it('postCsv uses default empty strings when no args are passed', async () => {
-      const { fetchImpl, calls } = makeFetch([{ ok: true, json: null }]);
-      const f = new HackFoldr('http://x', { fetchImpl });
-      f.id = 'r';
-      await f.postCsv();
-      expect(calls[0]?.body).toBe('"",""');
-    });
-
-    it('postRawCsv uses default empty strings when no args are passed', async () => {
-      const { fetchImpl, calls } = makeFetch([{ ok: true, json: null }]);
-      const f = new HackFoldr('http://x', { fetchImpl });
-      f.id = 'r';
-      await f.postRawCsv();
-      expect(calls[0]?.body).toBe('"",""\n"",""');
-    });
-
-    it('postInitCsv uses default empty strings when no args are passed', async () => {
-      const { fetchImpl, calls } = makeFetch([{ ok: true, json: null }]);
-      const f = new HackFoldr('http://x', { fetchImpl });
-      f.id = 'r';
-      await f.postInitCsv();
-      expect(calls[0]?.body).toBe('"",""\n"",""\n"",""');
     });
   });
 
@@ -623,6 +617,17 @@ describe('HackFoldr', () => {
       expect(f.rows).toHaveLength(1);
     });
 
+    it('keeps rows when a refresh returns a non-TOC spreadsheet body', async () => {
+      const { fetchImpl } = makeFetch([
+        { json: [['A1', 'B1'], ['plain sheet data', 'not a TOC']] },
+      ]);
+      const f = new HackFoldr('http://x', { fetchImpl });
+      f.id = 'r';
+      f.rows = [{ link: '/r.1', title: 'Sheet1', row: 2 }];
+      await expect(f.refreshToc()).resolves.toBe(false);
+      expect(f.rows).toEqual([{ link: '/r.1', title: 'Sheet1', row: 2 }]);
+    });
+
     it('does not seed Sheet1 or flip init flags on refresh', async () => {
       const { fetchImpl } = makeFetch([{ json: [] }]);
       const f = new HackFoldr('http://x', { fetchImpl });
@@ -637,16 +642,4 @@ describe('HackFoldr', () => {
     });
   });
 
-  describe('extractCommand', () => {
-    it('ignores empty command field', async () => {
-      const { fetchImpl } = makeFetch([
-        { json: [['#', '#'], ['/a', 'A']] },
-        { ok: true, json: { command: undefined } },
-      ]);
-      const f = new HackFoldr('http://x', { fetchImpl });
-      await f.fetch('r');
-      await f.push({ link: '/n', title: 'N', row: 77 });
-      expect(f.rows[1]?.row).toBe(77);
-    });
-  });
 });

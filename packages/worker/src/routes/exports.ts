@@ -18,12 +18,10 @@
  *
  * ─── Multi-sheet export (`GET /_/=:room/xlsx` etc.) ─────────────────────
  *
- * Legacy behavior (src/main.ls:363-392): iterates the TOC sheet rows,
- * fetches each sub-sheet by its `<room>.<N>` key, and merges them into a
- * single workbook with one named sheet per row. This requires DO-to-DO
- * fetches plus some TOC-parsing glue that depends on Phase 6 exec routes
- * and the multi-sheet routing in §1. Scoped out of Phase 8 per the phase
- * spec — routes return `501 Phase 8.1` with a brief explanation body.
+ * Legacy behavior (src/main.ls:363-392): iterate the TOC sheet rows, fetch
+ * each sub-sheet by its room key, and merge them into a single workbook with
+ * one named sheet per row. The current route implements that for binary
+ * workbook formats by asking the relevant room DOs for sheet-data.
  *
  * Route registration is via `registerExports(app)`, separate from
  * `registerRoomRoutes(app)` to avoid collisions with Phase 6's planned
@@ -32,6 +30,7 @@
  */
 /* istanbul ignore file */
 import type { Hono } from 'hono';
+import { parseTocGrid } from '@ethercalc/shared/toc';
 
 import { doFetch } from '../lib/do-dispatch.ts';
 import {
@@ -49,10 +48,9 @@ const TEXT_CT = 'text/plain; charset=utf-8';
 
 /**
  * Fetch the TOC sheet (at `:room`, sans `=` prefix) and its sub-rooms, then
- * build a single workbook with one worksheet per TOC row. TOC shape matches
- * `packages/client-multi/src/Foldr.ts`: first row is headers; subsequent
- * rows are `[link, title]` where link is `/<subroom>` and title is the
- * user-chosen sheet tab name.
+ * build a single workbook with one worksheet per TOC row. Canonical TOCs
+ * have a header row followed by `[link, title]` rows. Legacy Sandstorm TOCs
+ * can be headerless, so tolerate both shapes.
  *
  * Returns `null` when the TOC is missing or empty — caller emits 404.
  */
@@ -63,17 +61,12 @@ async function fetchMultiSheetBundle(
   const tocRes = await doFetch(env, room, '/_do/csv.json');
   if (tocRes.status !== 200) return null;
   const rows = (await tocRes.json()) as unknown;
-  if (!Array.isArray(rows) || rows.length < 2) return null;
+  if (!Array.isArray(rows) || rows.length === 0) return null;
 
-  // Skip header row. Each remaining row is `[link, title]`.
-  const tocRows = rows.slice(1) as unknown[];
+  const tocRows = parseTocGrid(rows);
   const bundle: Array<{ name: string; view: unknown }> = [];
-  for (const raw of tocRows) {
-    if (!Array.isArray(raw)) continue;
-    const link = typeof raw[0] === 'string' ? raw[0] : '';
-    const title = typeof raw[1] === 'string' && raw[1] ? raw[1] : `Sheet${bundle.length + 1}`;
+  for (const { link, title } of tocRows) {
     // Links start with `/` — strip to get the sub-room name.
-    if (!link || link.startsWith('#')) continue;
     const subroom = link.replace(/^\//, '');
     if (!subroom) continue;
     const sheetRes = await doFetch(env, subroom, '/_do/sheet-data');

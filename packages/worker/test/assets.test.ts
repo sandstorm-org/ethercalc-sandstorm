@@ -91,6 +91,14 @@ function buildFullStub(): {
       '/multi/index.html',
       { body: '<html>multi</html>', contentType: 'text/html; charset=utf-8' },
     ],
+    [
+      '/multi/assets/index-test.js',
+      { body: '/* multi js */', contentType: 'application/javascript' },
+    ],
+    [
+      '/multi/assets/index-test.css',
+      { body: '/* multi css */', contentType: 'text/css; charset=utf-8' },
+    ],
     ['/start.html', { body: '<html>start</html>', contentType: 'text/html; charset=utf-8' }],
     ['/panels.html', { body: '<html>panels</html>', contentType: 'text/html; charset=utf-8' }],
     ['/favicon.ico', { body: 'ICO-BYTES', contentType: 'image/x-icon' }],
@@ -307,6 +315,23 @@ describe('GET /:room (entry)', () => {
     expect(res.status).toBe(200);
     expect(await res.text()).toBe('<html>multi</html>');
     expect(stub.calls.at(-1)?.pathname).toBe('/multi/index.html');
+  });
+
+  it('serves built multi app chunks under /multi/assets', async () => {
+    const stub = buildFullStub();
+    const js = await call('/multi/assets/index-test.js', { ASSETS: stub.ASSETS });
+    expect(js.status).toBe(200);
+    expect(js.headers.get('Content-Type')).toBe('application/javascript');
+    expect(await js.text()).toBe('/* multi js */');
+
+    const css = await call('/multi/assets/index-test.css', { ASSETS: stub.ASSETS });
+    expect(css.status).toBe(200);
+    expect(css.headers.get('Content-Type')).toBe('text/css; charset=utf-8');
+    expect(await css.text()).toBe('/* multi css */');
+    expect(stub.calls.slice(-2).map((c) => c.pathname)).toEqual([
+      '/multi/assets/index-test.js',
+      '/multi/assets/index-test.css',
+    ]);
   });
 
   it('302s to ?auth=0 when KEY set and auth missing', async () => {

@@ -19,7 +19,7 @@ export default defineConfig({
       // bin.ts is a 5-line shim that calls main() and exits — exercised by
       // `bun run record`/`bun run replay`, not by vitest. Everything else
       // (cli logic, matchers, recorder, replayer) is 100% gated.
-      exclude: ['src/bin.ts'],
+      exclude: ['src/bin.ts', 'test/**/*.ts'],
       reporter: ['text', 'json-summary', 'lcov'],
       thresholds: {
         lines: 100,

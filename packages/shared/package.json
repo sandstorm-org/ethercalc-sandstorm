@@ -10,7 +10,8 @@
     ".": "./src/index.ts",
     "./messages": "./src/messages.ts",
     "./storage-keys": "./src/storage-keys.ts",
-    "./oracle-scenarios": "./src/oracle-scenarios.ts"
+    "./oracle-scenarios": "./src/oracle-scenarios.ts",
+    "./toc": "./src/toc.ts"
   },
   "scripts": {
     "test": "vitest run",

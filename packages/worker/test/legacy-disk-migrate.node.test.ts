@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { parseTocSave } from '@ethercalc/shared/toc';
 
 import {
   type LegacyDiskMigrationEnv,
@@ -6,6 +7,8 @@ import {
   roomsFromLegacyDumpManifest,
   roomsFromLegacyJsonBlob,
 } from '../src/handlers/legacy-disk-migrate.ts';
+import { csvToSocialCalc } from '../src/lib/csv.ts';
+import { encodeCSV } from '../src/lib/csv-encode.ts';
 
 describe('roomsFromLegacyJsonBlob', () => {
   it('groups legacy Redis-style keys by room and applies timestamps', () => {
@@ -101,6 +104,250 @@ describe('roomsFromLegacyJsonBlob', () => {
       },
     ]);
   });
+
+  it('ignores invalid typed values for known legacy keys', () => {
+    const rooms = roomsFromLegacyJsonBlob(
+      JSON.stringify({
+        'snapshot-bad-snapshot': 12,
+        'log-bad-log': 'not an array',
+        'audit-bad-audit': {},
+        'chat-bad-chat': {},
+        'ecell-bad-ecell': { alice: 'A1', bob: 2 },
+        'snapshot-good': 'save',
+        timestamps: {
+          'timestamp-good': 'NaN',
+        },
+      }),
+    );
+
+    expect(rooms).toEqual([
+      {
+        name: 'bad-audit',
+        snapshot: '',
+        log: [],
+        audit: [],
+        chat: [],
+        ecell: {},
+      },
+      {
+        name: 'bad-ecell',
+        snapshot: '',
+        log: [],
+        audit: [],
+        chat: [],
+        ecell: {},
+      },
+      {
+        name: 'bad-log',
+        snapshot: '',
+        log: [],
+        audit: [],
+        chat: [],
+        ecell: {},
+      },
+      {
+        name: 'bad-snapshot',
+        snapshot: '',
+        log: [],
+        audit: [],
+        chat: [],
+        ecell: {},
+      },
+      {
+        name: 'bad-chat',
+        snapshot: '',
+        log: [],
+        audit: [],
+        chat: [],
+        ecell: {},
+      },
+      {
+        name: 'good',
+        snapshot: 'save',
+        log: [],
+        audit: [],
+        chat: [],
+        ecell: {},
+      },
+    ].sort((a, b) => a.name.localeCompare(b.name)));
+  });
+
+  it('synthesizes a Sandstorm workbook TOC when legacy data only has sheet-number rooms', () => {
+    const rooms = roomsFromLegacyJsonBlob(
+      JSON.stringify({
+        'snapshot-sheet1': 'save-1',
+        'audit-sheet1': ['set A1 text t test'],
+        'log-sheet': [],
+      }),
+    );
+
+    expect(rooms.map((room) => room.name)).toEqual(['sheet', 'sheet1']);
+    const toc = rooms.find((room) => room.name === 'sheet');
+    expect(toc?.snapshot).toContain('cell:A1:t:#url');
+    expect(toc?.snapshot).toContain('cell:B1:t:#title');
+    expect(toc?.snapshot).toContain('cell:A2:t:/sheet1');
+    expect(toc?.snapshot).toContain('cell:B2:t:Sheet1');
+    expect(rooms.find((room) => room.name === 'sheet1')).toMatchObject({
+      snapshot: 'save-1',
+      audit: ['set A1 text t test'],
+    });
+  });
+
+  it('orders exact legacy sheet-number rooms numerically in synthesized TOCs', () => {
+    const rooms = roomsFromLegacyJsonBlob(
+      JSON.stringify({
+        'snapshot-sheet10': 'save-10',
+        'snapshot-sheet2': 'save-2',
+        'snapshot-sheet1': 'save-1',
+        'snapshot-sheet01': 'save-padded',
+        'snapshot-xsheet3': 'save-prefixed',
+      }),
+    );
+
+    const toc = rooms.find((room) => room.name === 'sheet');
+    expect(toc).toBeDefined();
+    expect(parseTocSave(toc?.snapshot ?? '')).toEqual([
+      { link: '/sheet1', title: 'Sheet1' },
+      { link: '/sheet2', title: 'Sheet2' },
+      { link: '/sheet10', title: 'Sheet10' },
+    ]);
+    expect(rooms.map((room) => room.name)).toEqual([
+      'sheet',
+      'sheet01',
+      'sheet1',
+      'sheet10',
+      'sheet2',
+      'xsheet3',
+    ]);
+  });
+
+  it('synthesizes a Sandstorm workbook TOC without an existing placeholder TOC room', () => {
+    const rooms = roomsFromLegacyJsonBlob(
+      JSON.stringify({
+        'snapshot-sheet1': 'save-1',
+      }),
+    );
+
+    expect(rooms.find((room) => room.name === 'sheet')).toMatchObject({
+      log: [],
+      audit: [],
+      chat: [],
+      ecell: {},
+    });
+  });
+
+  it('preserves existing empty TOC metadata when synthesizing a Sandstorm workbook TOC', () => {
+    const rooms = roomsFromLegacyJsonBlob(
+      JSON.stringify({
+        'snapshot-sheet': '',
+        'audit-sheet': ['audit-toc'],
+        'chat-sheet': ['chat-toc'],
+        'ecell-sheet': { alice: 'A1' },
+        'snapshot-sheet1': 'save-1',
+        timestamps: {
+          'timestamp-sheet': 100,
+          'timestamp-sheet1': 200,
+        },
+      }),
+    );
+
+    expect(rooms.find((room) => room.name === 'sheet')).toMatchObject({
+      log: [],
+      audit: ['audit-toc'],
+      chat: ['chat-toc'],
+      ecell: { alice: 'A1' },
+      updatedAt: 200,
+    });
+  });
+
+  it('preserves an existing Sandstorm workbook TOC snapshot', () => {
+    const rooms = roomsFromLegacyJsonBlob(
+      JSON.stringify({
+        'snapshot-sheet': 'existing-toc',
+        'snapshot-sheet1': 'save-1',
+        'snapshot-sheet2': 'save-2',
+      }),
+    );
+
+    expect(rooms.find((room) => room.name === 'sheet')?.snapshot).toBe('existing-toc');
+  });
+
+  it('normalizes an existing legacy Sandstorm workbook TOC snapshot', () => {
+    const rooms = roomsFromLegacyJsonBlob(
+      JSON.stringify({
+        'snapshot-sheet': [
+          'socialcalc:version:1.0',
+          'cell:A1:t:/sheet2',
+          'cell:B1:t:two',
+          'cell:A2:t:/sheet1',
+          'cell:B2:t:Sheet1',
+          'cell:A3:t:/sheet2',
+          'cell:B3:t:Sheet2',
+          'cell:A4:t:/sheet3',
+          'cell:B4:t:Sheet3',
+          'sheet:c:2:r:4:tvf:1',
+        ].join('\n'),
+        'snapshot-sheet1': 'save-1',
+        'snapshot-sheet2': 'save-2',
+        'snapshot-sheet3': 'save-3',
+      }),
+    );
+
+    const toc = rooms.find((room) => room.name === 'sheet');
+    expect(rooms.map((room) => room.name)).toEqual(['sheet', 'sheet1', 'sheet2', 'sheet3']);
+    expect(toc?.snapshot).toContain('cell:A1:t:#url');
+    expect(toc?.snapshot).toContain('cell:B1:t:#title');
+    expect(toc?.snapshot).toContain('cell:A2:t:/sheet1');
+    expect(toc?.snapshot).toContain('cell:B2:t:Sheet1');
+    expect(toc?.snapshot).toContain('cell:A3:t:/sheet2');
+    expect(toc?.snapshot).toContain('cell:B3:t:two');
+    expect(toc?.snapshot).toContain('cell:A4:t:/sheet3');
+    expect(toc?.snapshot).toContain('cell:B4:t:Sheet3');
+  });
+
+  it('folds TOC log entries before normalizing and clears the stale log', () => {
+    const rooms = roomsFromLegacyJsonBlob(
+      JSON.stringify({
+        'snapshot-sheet': csvToSocialCalc(encodeCSV([
+          ['#url', '#title'],
+          ['/sheet1', 'Sheet1'],
+          ['/sheet2', 'Sheet2'],
+        ])),
+        'log-sheet': ['set B3 text t two'],
+        'snapshot-sheet1': 'save-1',
+        'snapshot-sheet2': 'save-2',
+      }),
+    );
+
+    const toc = rooms.find((room) => room.name === 'sheet');
+    expect(toc?.snapshot).toContain('cell:A3:t:/sheet2');
+    expect(toc?.snapshot).toContain('cell:B3:t:two');
+    expect(toc?.log).toEqual([]);
+  });
+
+  it('normalizes log-only Sandstorm workbook TOCs instead of replaying the stale log', () => {
+    const rooms = roomsFromLegacyJsonBlob(
+      JSON.stringify({
+        'log-sheet': [
+          'set A1 text t /sheet2',
+          'set B1 text t two',
+          'set A2 text t /sheet1',
+          'set B2 text t Sheet1',
+        ],
+        'snapshot-sheet1': 'save-1',
+        'snapshot-sheet2': 'save-2',
+      }),
+    );
+
+    const toc = rooms.find((room) => room.name === 'sheet');
+    expect(toc?.snapshot).toContain('cell:A1:t:#url');
+    expect(toc?.snapshot).toContain('cell:B1:t:#title');
+    expect(toc?.snapshot).toContain('cell:A2:t:/sheet1');
+    expect(toc?.snapshot).toContain('cell:B2:t:Sheet1');
+    expect(toc?.snapshot).toContain('cell:A3:t:/sheet2');
+    expect(toc?.snapshot).toContain('cell:B3:t:two');
+    expect(toc?.log).toEqual([]);
+  });
 });
 
 describe('roomsFromLegacyDumpManifest', () => {
@@ -109,6 +356,10 @@ describe('roomsFromLegacyDumpManifest', () => {
       ['/dump/snapshot-z.txt', 'save-z'],
       ['/dump/audit-z.txt', 'one\\ntwo\\rthree\\\\four\n'],
       ['/dump/audit-y.txt', 'audit-y'],
+      ['/dump/snapshot-nested/file.txt', 'nested'],
+      ['/dump/snapshot-nested\\file.txt', 'nested-backslash'],
+      ['/dump/snapshot-../escape.txt', 'escape'],
+      ['/dump/snapshot-no-extension', 'no extension'],
     ]);
 
     const rooms = await roomsFromLegacyDumpManifest(
@@ -121,6 +372,10 @@ describe('roomsFromLegacyDumpManifest', () => {
         'nested/file.txt',
         'nested\\file.txt',
         '../escape.txt',
+        'snapshot-nested/file.txt',
+        'snapshot-nested\\file.txt',
+        'snapshot-../escape.txt',
+        'snapshot-no-extension',
         'snapshot-dot..dot.txt',
         'snapshot-.txt',
         'chat-z.txt',
@@ -171,6 +426,7 @@ describe('roomsFromLegacyDumpManifest', () => {
 describe('migrateLegacyDisk', () => {
   it('imports dump.json through DO seed and batches D1 index rows', async () => {
     const seedBodies: unknown[] = [];
+    const seedInits: RequestInit[] = [];
     const d1 = makeD1();
     const env = makeEnv({
       legacyFiles: {
@@ -183,6 +439,7 @@ describe('migrateLegacyDisk', () => {
         }),
       },
       onSeed: async (_room, init) => {
+        seedInits.push(init);
         seedBodies.push(JSON.parse(String(init.body)));
         return new Response('OK', { status: 201 });
       },
@@ -204,6 +461,9 @@ describe('migrateLegacyDisk', () => {
         skipIndex: true,
       },
     ]);
+    expect(seedInits).toHaveLength(1);
+    expect(seedInits[0]?.method).toBe('POST');
+    expect(new Headers(seedInits[0]?.headers).get('Content-Type')).toBe('application/json');
     expect(d1.rows).toEqual([{ room: 'room', updatedAt: 99 }]);
   });
 
