@@ -1,2 +1,2 @@
 run ::
-	@node ../node_modules/webpack-dev-server/bin/webpack-dev-server.js -h
+	cd .. && npm run build:frontend

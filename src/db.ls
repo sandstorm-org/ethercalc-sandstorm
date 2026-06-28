@@ -12,53 +12,12 @@
     | /^redis/.test name and items?length
       [redisPort, redisHost, redisPass] = items.0.credentials<[ port hostname password ]>
 
-  redisHost ?= \localhost
-  redisPort ?= 6379
   dataDir ?= process.cwd!
-
-  require! \redis
-  make-client = (cb) ->
-    if redisSockpath
-      client = redis.createClient redisSockpath
-    else
-      client = redis.createClient redisPort, redisHost
-    if redisPass
-      client.auth redisPass, -> console.log ...arguments
-    if redisDb
-      client.select redisDb, -> console.log "Selecting Redis database #{redisDb}"
-    client.on \connect cb if cb
-    return client
-
-  try
-    RedisStore = require \zappajs/node_modules/socket.io/lib/stores/redis
-    <~ @io.configure
-    redis-client = make-client ~>
-      redis-pub = make-client!
-      redis-sub = make-client!
-      store = new RedisStore { redis, redis-pub, redis-sub, redis-client }
-      @io.set \store store
-      @io.enable 'browser client etag'
-      @io.enable 'browser client gzip'
-      @io.enable 'browser client minification'
-      @io.set 'log level', 5
-    redis-client.on \error ->
-
-  db = make-client ~>
-    db.DB = true
-    if redisSockpath
-      console.log "Connected to Redis Server: unix:#redisSockpath"
-    else
-      console.log "Connected to Redis Server: #redisHost:#redisPort"
-
   EXPIRE = @EXPIRE
-  db.on \error (err) ->
-    | db.DB is true => return console.log """
-      ==> Lost connection to Redis Server - attempting to reconnect...
-    """
-    | db.DB => return false
-    | otherwise
-    console.log err
-    console.log "==> Falling back to file system storage: #{ dataDir }/dump/"
+
+  use-file-db = (db, err) ->
+    console.log err if err
+    console.log "==> Using file system storage: #{ dataDir }/dump/"
     if EXPIRE
       console.log "==> The --expire <seconds> option requires a Redis server; stopping!"
       process.exit!
@@ -154,4 +113,39 @@
           @exec cb
         | otherwise => cb null, @results
       return cmds
+
+  redis-configured = redisSockpath or redisHost or redisPort
+  if redis-configured
+    redisHost ?= \localhost
+    redisPort ?= 6379
+    require! \redis
+    make-client = (cb) ->
+      if redisSockpath
+        client = redis.createClient redisSockpath
+      else
+        client = redis.createClient redisPort, redisHost
+      if redisPass
+        client.auth redisPass, -> console.log ...arguments
+      if redisDb
+        client.select redisDb, -> console.log "Selecting Redis database #{redisDb}"
+      client.on \connect cb if cb
+      return client
+
+    db = make-client ~>
+      db.DB = true
+      if redisSockpath
+        console.log "Connected to Redis Server: unix:#redisSockpath"
+      else
+        console.log "Connected to Redis Server: #redisHost:#redisPort"
+
+    db.on \error (err) ->
+      | db.DB is true => return console.log """
+        ==> Lost connection to Redis Server - attempting to reconnect...
+      """
+      | db.DB => return false
+      | otherwise => use-file-db db, err
+  else
+    events = require \events
+    db = new events.EventEmitter!
+    use-file-db db
   @__DB__ = db

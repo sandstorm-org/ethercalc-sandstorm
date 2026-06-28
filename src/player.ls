@@ -43,7 +43,7 @@
       window.location = './_start'
       return
 
-    options = { 'connect timeout': 1500ms, +reconnect, 'reconnection delay': 500ms, 'max reconnection attempts': 1800 }
+    options = { timeout: 1500ms, +reconnection, reconnectionDelay: 500ms, reconnectionAttempts: 1800 }
     options.path = endpoint.replace(// /?$ // \/socket.io) if endpoint
     showError = ->
       vex?closeAll!
@@ -256,7 +256,7 @@ Check the activity stream to see the newly edited page!
     ss.tabnums.form = ss.tabs.length if ss.tabs
     ss.tabs?push do
       name: \form
-      text: SocialCalc.Constants.s_loc_form
+      text: \Form
       html: """
         <div id="%id.formtools" style="display:none;"><div style="%tbt."><table cellspacing="0" cellpadding="0">
         <tr><td style="vertical-align:middle;padding-right:32px;padding-left:16px;"><div style="%tbt.">
@@ -271,7 +271,7 @@ Check the activity stream to see the newly edited page!
     ss.tabnums.graph = ss.tabs.length if ss.tabs
     ss.tabs?push do
       name: \graph
-      text: SocialCalc.Constants.s_loc_graph
+      text: \Graph
       html: """
         <div id="%id.graphtools" style="display:none;"><div style="%tbt."><table cellspacing="0" cellpadding="0"><tr><td style="vertical-align:middle;padding-right:32px;padding-left:16px;"><div style="%tbt.">%loc!Cells to Graph!</div><div id="%id.graphrange" style="font-weight:bold;">%loc!Not Set!</div></td><td style="vertical-align:top;padding-right:32px;"><div style="%tbt.">%loc!Set Cells To Graph!</div><select id="%id.graphlist" size="1" onfocus="%s.CmdGotFocus(this);"><option selected>[select range]</option><option>%loc!Select all!</option></select></td><td style="vertical-align:middle;padding-right:4px;"><div style="%tbt.">%loc!Graph Type!</div><select id="%id.graphtype" size="1" onchange="window.GraphChanged(this);" onfocus="%s.CmdGotFocus(this);"></select><input type="button" value="%loc!OK!" onclick="window.GraphSetCells();" style="font-size:x-small;"></div></td><td style="vertical-align:middle;padding-right:16px;"><div style="%tbt.">&nbsp;</div><input id="%id.graphhelp" type="button" onclick="DoGraph(true);" value="%loc!Help!" style="font-size:x-small;"></div></td><td style="vertical-align:middle;padding-right:16px;">%loc!Min X! <input id="%id.graphMinX" onchange="window.MinMaxChanged(this,0);" onfocus="%s.CmdGotFocus(this);" size=5/>%loc!Max X! <input id="%id.graphMaxX" onchange="window.MinMaxChanged(this,1);" onfocus="%s.CmdGotFocus(this);" size=5/><br/>%loc!Min Y! <input id="%id.graphMinY" onchange="window.MinMaxChanged(this,2);" onfocus="%s.CmdGotFocus(this);" size=5/>%loc!Max Y! <input id="%id.graphMaxY" onchange="window.MinMaxChanged(this,3);" onfocus="%s.CmdGotFocus(this);" size=5/></div></td></tr></table></div></div>
       """

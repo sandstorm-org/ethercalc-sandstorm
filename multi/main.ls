@@ -1,10 +1,10 @@
-require \./styles.styl
+require \./styles.css
 React = require \react
 TabPanel = require \react-basic-tabs
 BasePath = \.
 Index = \foobar
 Index = RegExp.$1 if window.location.href is /\/=([^_][^\/?]*)(?:\?.*)?$/
-HackFoldr = require(\./foldr.ls).HackFoldr
+HackFoldr = require(\./foldr).HackFoldr
 IsReadOnly = window.location.href is /auth=0/
 Suffix = ""
 if /\?auth=/.test window.location.search
@@ -30,8 +30,9 @@ App = createClass do
     for node in document.getElementsByTagName('iframe')
       renderFrameContent node, @props.foldr.rows
   onChange: ->
-    @setProps activeIndex: it
-    document.getElementsByTagName('iframe')[it].contentWindow.focus!
+    activeIndex = it
+    @setProps { activeIndex }
+    setTimeout (-> focusFrame activeIndex), 0ms
   on-add: ->
     { foldr } = @props
     prefix = \Sheet
@@ -82,6 +83,10 @@ Frame = createClass do
   componentDidUpdate: -> renderFrameContent @getDOMNode!, @props.rows
 
 isFirstTime = yes
+focusFrame = (idx) ->
+  node = document.getElementsByTagName('iframe')[idx]
+  node?contentWindow?focus!
+
 renderFrameContent = (node, rows) ->
   doc = node.contentDocument
   return unless doc?
@@ -93,8 +98,8 @@ renderFrameContent = (node, rows) ->
     index: Index
   },,2), \*
   if isFirstTime and node is document.getElementsByTagName('iframe')[0]
-    node.contentWindow.focus!
-    isFirstTime = no
+    focusFrame 0
+    isFirstTime := no
 
 <-(window.init=)
 foldr = new HackFoldr BasePath

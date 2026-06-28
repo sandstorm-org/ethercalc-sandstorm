@@ -1,16 +1,24 @@
 @include = ->
-  @use \json, @app.router, @express.static __dirname
-  @app.use \/edit @express.static __dirname
-  @app.use \/view @express.static __dirname
-  @app.use \/app @express.static __dirname
+  appRoot = process.env.ETHERCALC_APP_ROOT or __dirname
+  @use @express.static appRoot
+  @app.use \/edit @express.static appRoot
+  @app.use \/view @express.static appRoot
+  @app.use \/app @express.static appRoot
 
   @include \dotcloud
   @include \player-broadcast
   @include \player-graph
   @include \player
 
-  J = require \j
-  csv-parse = require \csv-parse
+  J-cache = null
+  get-J = ->
+    J-cache := require \j unless J-cache
+    J-cache
+
+  csv-parse-cache = null
+  parse-csv = ->
+    csv-parse-cache := require \csv-parse unless csv-parse-cache
+    csv-parse-cache.apply null, arguments
 
   DB = @include \db
   SC = @include \sc
@@ -29,8 +37,8 @@
     text/plain text/html text/csv application/json
   ]>.map (+ "; charset=utf-8")
 
-  require! <[ fs ]>
-  const RealBin = require \path .dirname do
+  require! <[ fs path ]>
+  const RealBin = process.env.ETHERCALC_APP_ROOT or path.dirname do
     fs.realpathSync __filename
   const DevMode = fs.existsSync "#RealBin/.git"
   #Time Triggered Email - contains next send time 
@@ -114,7 +122,7 @@
         return
       if SC[room] != undefined
         csv <~ SC[room].exportCSV
-        _, body <~ csv-parse(csv, delimiter: \,)
+        _, body <~ parse-csv(csv, delimiter: \,)
         body.shift! # header
         todo = DB.multi!
         names = []
@@ -152,7 +160,7 @@
 
   ExportCSV-JSON = api -> [Json, (sc, cb) ->
     csv <- sc.exportCSV
-    _, body <- csv-parse(csv, delimiter: \,)
+    _, body <- parse-csv(csv, delimiter: \,)
     cb body
   ]
   ExportCSV = api -> [Csv, (sc, cb) -> sc.exportCSV cb ]
@@ -164,10 +172,12 @@
     ods: \application/vnd.oasis.opendocument.spreadsheet
     fods: \application/vnd.oasis.opendocument.spreadsheet
   Export-J = (type) -> api (-> # single
+    J = get-J!
     rv = J.utils["to_#type"](J.read(new Buffer it))
     rv = rv.Sheet1 if rv?Sheet1?
     [J-TypeMap[type], rv]
   ), ((names, saves) -> # multi
+    J = get-J!
     input = [ null, { SheetNames: names, Sheets: {} } ]
     for save, idx in saves
       [harb, { Sheets: { Sheet1 } }] = J.read(new Buffer save)
@@ -329,6 +339,7 @@
     buf = Buffer.concat cs
     return cb buf.toString(\utf8) if request.is \text/x-socialcalc
     return cb buf.toString(\utf8) if request.is \text/plain
+    J = get-J!
     # TODO: Move to thread
     for k, save of (J.utils.to_socialcalc(J.read buf) || {'': ''})
       re = /\ncell:([A-Z]+[0-9]+)/g
@@ -357,6 +368,7 @@
       buf = iconv.decode buf, \utf8
       buf = iconv.encode buf, \latin1
       buf = iconv.decode buf, \utf8
+    J = get-J!
     # TODO: Move to thread
     for k, save of (J.utils.to_socialcalc(J.read buf) || {'': ''})
       return cb save
@@ -372,6 +384,7 @@
     buf = Buffer.concat cs
     idx = 0
     toc = '#url,#title\n'
+    J = get-J!
     parsed = J.utils.to_socialcalc J.read buf
     sheets-to-idx = {}
     res = []
@@ -468,20 +481,11 @@
 
   @on disconnect: !->
     console.log "on disconnect"
-    { id } = @socket
-    if IO.sockets.manager?roomClients?
-      # socket.io 0.9.x
-      :CleanRoomLegacy for key of IO.sockets.manager.roomClients[id] when key is // ^/log- //
-        for client in IO.sockets.clients(key.substr(1))
-        | client.id isnt id => continue CleanRoomLegacy
-        room = key.substr(5)
-        SC[room]?terminate!
-        delete SC[room]
-      return
-    :CleanRoom for key, val of IO.sockets.adapter.rooms when key is // ^log- //
-      for client, isConnected of val | isConnected and client isnt id
-        continue CleanRoom
-      room = key.substr(4)
+    joinedRooms = @socket?data?joinedRooms or []
+    for key in joinedRooms when key is // ^log- //
+      clients = IO.sockets.adapter.rooms.get key
+      continue if clients?size
+      room = key.substr 4
       SC[room]?terminate!
       delete SC[room]
 

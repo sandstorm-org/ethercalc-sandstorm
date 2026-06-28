@@ -1,4 +1,13 @@
 /node_modules/
 /dump/
+/dist/
+/.build/
 *.swp
 .codex/skills/sandstorm-app-author/
+
+# Some static/ files are generated:
+static/ethercalc.js
+static/ethercalc.js.map
+static/multi.js
+static/multi.js.map
+static/socket.io.js

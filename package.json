@@ -10,6 +10,7 @@
   "dependencies": {
     "cors": "*",
     "csv-parse": "^0.0.6",
+    "express": "^5.2.1",
     "iconv-lite": "^0.4.13",
     "j": "^1.0.0",
     "livescript": "^1.5.0",
@@ -17,31 +18,25 @@
     "optimist": "*",
     "redis": "^0.12.0",
     "socialcalc": "^2.3.0",
+    "socket.io": "^4.8.3",
     "uuid-pure": "*",
     "xlsx": "^0.14.5",
-    "xoauth2": "*",
-    "zappajs": "^0.6.0"
-  },
-  "optionalDependencies": {
-    "webworker-threads": "^0.7.1"
+    "xoauth2": "*"
   },
   "devDependencies": {
-    "css-loader": "^0.9.0",
-    "livescript-loader": "^0.1.5",
+    "esbuild": "^0.28.1",
     "react": "^0.12.1",
     "react-basic-tabs": "^1.0.3",
-    "react-hot-loader": "^0.5.0",
-    "style-loader": "^0.8.2",
-    "stylus-loader": "^3.0.2",
-    "superagent": "^0.21.0",
-    "webpack": "^1.4.13",
-    "webpack-dev-server": "^1.6.6"
+    "superagent": "^0.21.0"
   },
   "subdomain": "ethercalc",
   "bin": {
     "ethercalc": "./bin/ethercalc"
   },
   "scripts": {
+    "build:backend": "node scripts/build-backend.js",
+    "build:frontend": "node scripts/build-frontend.js",
+    "build:sandstorm": "npm run build:frontend && npm run build:backend",
     "start": "node app.js"
   },
   "engines": {

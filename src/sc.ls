@@ -1,5 +1,5 @@
 require! <[ vm fs path ]>
-const FindBin = path.dirname fs.realpathSync __filename
+const FindBin = process.env.ETHERCALC_APP_ROOT or path.dirname fs.realpathSync __filename
 if fs.existsSync "#FindBin/node_modules/socialcalc/dist/SocialCalc.js" \utf8
   bootSC = fs.readFileSync "#FindBin/node_modules/socialcalc/dist/SocialCalc.js" \utf8
 else
@@ -37,18 +37,12 @@ bootSC += """;var SocialCalc = this.SocialCalc; var window = this;(#{->
 })();"""
 
 ##################################
-### WebWorker Threads Fallback ###
+### VM-backed SocialCalc Worker ###
 ##################################
-IsThreaded = true
-Worker = try
-  throw \vm if argv.vm
-  console.log "Starting backend using webworker-threads"
-  (require \webworker-threads).Worker
-catch
-  console.log "Falling back to vm.CreateContext backend"
-  IsThreaded = false
+IsThreaded = false
+console.log "Starting backend using vm.createContext"
 
-Worker ||= class => (code) ->
+Worker = class => (code) ->
   cxt = { console, self: { onmessage: -> }, alert: -> }
   cxt.window =
     setTimeout: (cb, ms) -> process.nextTick cb

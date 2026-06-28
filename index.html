@@ -32,7 +32,6 @@ window.addEventListener("message", function(it){
 </script>
 <script src="./static/ethercalc.js"></script>
 <script src="./static/socket.io.js"></script>
-<script src="./zappa/zappa.js"></script>
 <script src="./player/broadcast.js"></script>
 <script src="./player/graph.js"></script>
 <script src="./player/main.js"></script>
@@ -42,16 +41,17 @@ var readl10nfile = function(data) {
         SocialCalc.Constants[k] = data[k];
     }
 }
-$.ajax({url: ("./l10n/" + navigator.language + ".json").replace(/de-\w+/, 'de').replace(/zh-Hant/i, 'zh-TW').replace(/fr-\w+/, 'fr').replace(/en-\w+/, 'en'),
-        async: false,
-        success: function(data){readl10nfile(data)},
-        error: function() {
-          $.ajax({url: "./l10n/en.json",
-                  async: false,
-                  success: function(data){readl10nfile(data)},
-                  error: function(){console.error("Language file not found.")}
-          });
-        }
+var languageUrl = ("./l10n/" + navigator.language + ".json")
+  .replace(/de-\w+/, 'de')
+  .replace(/zh-Hant/i, 'zh-TW')
+  .replace(/fr-\w+/, 'fr')
+  .replace(/en-\w+/, 'en');
+$.getJSON(languageUrl)
+  .done(readl10nfile)
+  .fail(function() {
+    $.getJSON("./l10n/en.json")
+      .done(readl10nfile)
+      .fail(function(){console.error("Language file not found.")});
   });
 </script>
 
