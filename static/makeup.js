@@ -1,27 +1,121 @@
-if (window.SocialCalc && !window.SocialCalc.EtherCalcSizeSSDivUsesParentWidth) {
+if (window.SocialCalc && !window.SocialCalc.EtherCalcUsesFlexResize) {
     (function() {
+        var SocialCalc = window.SocialCalc;
         var originalSizeSSDiv = window.SocialCalc.SizeSSDiv;
+        var originalSetTab = window.SocialCalc.SetTab;
 
         if (!originalSizeSSDiv) {
             return;
         }
 
+        var addClass = function(element, className) {
+            if (element && element.classList) {
+                element.classList.add(className);
+            }
+        };
+
         var getViewportClientSize = function() {
-            var size = {};
-            if (document.documentElement && document.documentElement.clientWidth) {
-                size.width = document.documentElement.clientWidth;
-                size.height = document.documentElement.clientHeight;
-                return size;
-            }
-            if (document.body && document.body.clientWidth) {
-                size.width = document.body.clientWidth;
-                size.height = document.body.clientHeight;
-                return size;
-            }
+            var root = document.documentElement || {};
+            var body = document.body || {};
+
             return {
-                width: window.innerWidth || 0,
-                height: window.innerHeight || 0
+                width: root.clientWidth || body.clientWidth || window.innerWidth || 0,
+                height: root.clientHeight || body.clientHeight || window.innerHeight || 0
             };
+        };
+
+        var tableEditorReady = function(editor) {
+            return !!(
+                editor &&
+                editor.toplevel &&
+                editor.toplevel.style &&
+                editor.griddiv &&
+                editor.griddiv.style &&
+                editor.verticaltablecontrol &&
+                editor.verticaltablecontrol.main &&
+                editor.verticaltablecontrol.main.style &&
+                editor.horizontaltablecontrol &&
+                editor.horizontaltablecontrol.main &&
+                editor.horizontaltablecontrol.main.style
+            );
+        };
+
+        var applyFlexClasses = function(spreadsheet) {
+            addClass(spreadsheet.parentNode, 'socialcalc-flex-parent');
+            addClass(spreadsheet.spreadsheetDiv, 'socialcalc-spreadsheet-shell');
+            addClass(spreadsheet.editorDiv, 'socialcalc-main-view');
+
+            var views = spreadsheet.views || {};
+            for (var vname in views) {
+                if (!Object.prototype.hasOwnProperty.call(views, vname)) {
+                    continue;
+                }
+                if (views[vname] && views[vname].element) {
+                    addClass(views[vname].element, 'socialcalc-main-view');
+                }
+            }
+        };
+
+        var getParentSize = function(spreadsheet) {
+            var parent = spreadsheet.parentNode;
+            var viewportSize = getViewportClientSize();
+            var rect = parent.getBoundingClientRect ?
+                parent.getBoundingClientRect() :
+                { left: 0, top: 0 };
+
+            return {
+                width: parent.clientWidth ||
+                    Math.max(0, viewportSize.width - Math.max(rect.left, 0)),
+                height: parent.clientHeight ||
+                    Math.max(0, viewportSize.height - Math.max(rect.top, 0))
+            };
+        };
+
+        var isVisible = function(element) {
+            if (!element) {
+                return false;
+            }
+            if (window.getComputedStyle) {
+                return window.getComputedStyle(element).display !== 'none';
+            }
+            return element.style.display !== 'none';
+        };
+
+        var getActiveViewElement = function(spreadsheet) {
+            var views = spreadsheet.views || {};
+            var tabs = spreadsheet.tabs || [];
+            var tab = tabs[spreadsheet.currentTab];
+            var viewName = tab && tab.view ? tab.view : 'sheet';
+            var view = views[viewName];
+
+            if (view && isVisible(view.element)) {
+                return view.element;
+            }
+
+            for (var vname in views) {
+                if (!Object.prototype.hasOwnProperty.call(views, vname)) {
+                    continue;
+                }
+                if (views[vname] && isVisible(views[vname].element)) {
+                    return views[vname].element;
+                }
+            }
+
+            return spreadsheet.editorDiv;
+        };
+
+        var getActiveViewHeight = function(spreadsheet) {
+            var viewElement = getActiveViewElement(spreadsheet);
+            var rect = viewElement && viewElement.getBoundingClientRect ?
+                viewElement.getBoundingClientRect() :
+                null;
+
+            return Math.floor(
+                (rect && rect.height) ||
+                (viewElement && viewElement.clientHeight) ||
+                spreadsheet.height - (spreadsheet.nonviewheight || 0) ||
+                0
+            );
         };
 
         window.SocialCalc.SizeSSDiv = function(spreadsheet) {
@@ -30,16 +124,11 @@ if (window.SocialCalc && !window.SocialCalc.EtherCalcSizeSSDivUsesParentWidth) {
             }
 
             var resized = originalSizeSSDiv(spreadsheet);
-            var viewportSize = getViewportClientSize();
-            var parentRect = spreadsheet.parentNode.getBoundingClientRect ?
-                spreadsheet.parentNode.getBoundingClientRect() :
-                { left: 0, top: 0 };
+            var parentSize = getParentSize(spreadsheet);
+            var spreadsheetWidth = Math.floor(parentSize.width);
+            var spreadsheetHeight = Math.floor(parentSize.height);
 
-            var parentWidth = spreadsheet.parentNode.clientWidth;
-            var availableWidth = viewportSize.width ?
-                viewportSize.width - Math.max(parentRect.left, 0) :
-                parentWidth;
-            var spreadsheetWidth = Math.floor(Math.min(parentWidth, availableWidth)) - 1;
+            applyFlexClasses(spreadsheet);
 
             if (!spreadsheet.requestedWidth &&
                 spreadsheet.spreadsheetDiv &&
@@ -52,22 +141,93 @@ if (window.SocialCalc && !window.SocialCalc.EtherCalcSizeSSDivUsesParentWidth) {
 
             if (!spreadsheet.requestedHeight &&
                 spreadsheet.spreadsheetDiv &&
-                viewportSize.height &&
-                spreadsheet.height > viewportSize.height - Math.max(parentRect.top, 0)) {
-                spreadsheet.height = Math.floor(viewportSize.height - Math.max(parentRect.top, 0));
-                spreadsheet.spreadsheetDiv.style.height = spreadsheet.height + 'px';
+                spreadsheetHeight > 0 &&
+                spreadsheet.height !== spreadsheetHeight) {
+                spreadsheet.height = spreadsheetHeight;
+                spreadsheet.spreadsheetDiv.style.height = spreadsheetHeight + 'px';
                 resized = true;
             }
 
             return resized;
         };
 
-        window.SocialCalc.EtherCalcSizeSSDivUsesParentWidth = true;
+        window.SocialCalc.DoOnResize = function(spreadsheet) {
+            if (!spreadsheet || !spreadsheet.views || !spreadsheet.SizeSSDiv) {
+                return;
+            }
+            if (!spreadsheet.spreadsheetDiv || !spreadsheet.spreadsheetDiv.style) {
+                return;
+            }
+            if (!spreadsheet.parentNode) {
+                return;
+            }
+            if (!tableEditorReady(spreadsheet.editor)) {
+                if (window.setTimeout) {
+                    window.setTimeout(function() {
+                        if (tableEditorReady(spreadsheet.editor)) {
+                            SocialCalc.DoOnResize(spreadsheet);
+                        }
+                    }, 50);
+                }
+                return;
+            }
+
+            spreadsheet.SizeSSDiv();
+            applyFlexClasses(spreadsheet);
+
+            var viewWidth = spreadsheet.width;
+            var viewHeight = getActiveViewHeight(spreadsheet) ||
+                spreadsheet.height - (spreadsheet.nonviewheight || 0);
+            var views = spreadsheet.views;
+
+            for (var vname in views) {
+                if (!Object.prototype.hasOwnProperty.call(views, vname)) {
+                    continue;
+                }
+
+                var view = views[vname];
+                var element = view && view.element;
+                if (!element || !element.style) {
+                    continue;
+                }
+
+                element.style.width = viewWidth + 'px';
+                element.style.height = viewHeight + 'px';
+            }
+
+            spreadsheet.editor.ResizeTableEditor(viewWidth, viewHeight);
+        };
+
+        if (originalSetTab) {
+            window.SocialCalc.SetTab = function() {
+                var result = originalSetTab.apply(this, arguments);
+                var spreadsheet = SocialCalc.GetSpreadsheetControlObject &&
+                    SocialCalc.GetSpreadsheetControlObject();
+                if (spreadsheet && window.setTimeout) {
+                    window.setTimeout(function() {
+                        SocialCalc.DoOnResize(spreadsheet);
+                    }, 0);
+                }
+                return result;
+            };
+        }
+
+        window.SocialCalc.EtherCalcUsesFlexResize = true;
     })();
 }
 
 jQuery(document).ready(function() {
     var attempts = 0;
+    var resizeSpreadsheet = function() {
+        var spreadsheet = window.spreadsheet ||
+            (window.SocialCalc &&
+                window.SocialCalc.GetSpreadsheetControlObject &&
+                window.SocialCalc.GetSpreadsheetControlObject());
+
+        if (spreadsheet && spreadsheet.DoOnResize) {
+            spreadsheet.DoOnResize();
+        }
+    };
     var applyMakeup = function() {
         if (!jQuery('#SocialCalc-edittools').length) {
             if (attempts < 50) {
@@ -77,74 +237,76 @@ jQuery(document).ready(function() {
             return;
         }
 
-            jQuery('#SocialCalc-edittools img[id]').addClass('btn btn-link btn-xs');
+        jQuery('#SocialCalc-edittools img[id]').addClass('btn btn-link btn-xs');
 
-            var editTools = jQuery('#SocialCalc-edittools');
-            if (editTools.length) {
-                var editToolsShell = editTools.parent().addClass('socialcalc-edittools-shell');
-                var editToolsToggle = editTools.next('.socialcalc-edittools-toggle');
+        var editTools = jQuery('#SocialCalc-edittools');
+        if (editTools.length) {
+            var editToolsShell = editTools.parent().addClass('socialcalc-edittools-shell');
+            var editToolsToggle = editTools.next('.socialcalc-edittools-toggle');
 
-                if (!editToolsToggle.length) {
-                    editToolsToggle = jQuery('<button type="button" class="socialcalc-edittools-toggle" aria-label="Show more toolbar buttons" aria-expanded="false" title="Show more toolbar buttons">&#9662;</button>');
-                    editTools.after(editToolsToggle);
-                }
-
-                var setEditToolsExpanded = function(expanded) {
-                    editTools.toggleClass('socialcalc-edittools-expanded', expanded);
-                    editToolsShell.toggleClass('socialcalc-edittools-expanded-shell', expanded);
-                    editToolsToggle
-                        .attr('aria-expanded', expanded ? 'true' : 'false')
-                        .attr('aria-label', expanded ? 'Show fewer toolbar buttons' : 'Show more toolbar buttons')
-                        .attr('title', expanded ? 'Show fewer toolbar buttons' : 'Show more toolbar buttons')
-                        .html(expanded ? '&#9652;' : '&#9662;');
-                };
-
-                var updateEditToolsOverflow = function() {
-                    var toggleWidth = editToolsToggle.is(':visible') ? editToolsToggle.outerWidth(true) : 0;
-                    var contentWidth = 0;
-                    var toolbarWidth = editTools[0].clientWidth + toggleWidth;
-
-                    editTools.children().each(function() {
-                        contentWidth += jQuery(this).outerWidth(true);
-                    });
-
-                    var hasOverflow = contentWidth > toolbarWidth + 1;
-                    editToolsShell.toggleClass('socialcalc-edittools-has-overflow', hasOverflow);
-
-                    if (!hasOverflow) {
-                        setEditToolsExpanded(false);
-                    }
-                };
-
-                editToolsToggle.off('click.socialcalcEditTools').on('click.socialcalcEditTools', function() {
-                    setEditToolsExpanded(!editTools.hasClass('socialcalc-edittools-expanded'));
-                });
-
-                jQuery(window).off('resize.socialcalcEditTools').on('resize.socialcalcEditTools', updateEditToolsOverflow);
-                setTimeout(updateEditToolsOverflow, 0);
+            if (!editToolsToggle.length) {
+                editToolsToggle = jQuery('<button type="button" class="socialcalc-edittools-toggle" aria-label="Show more toolbar buttons" aria-expanded="false" title="Show more toolbar buttons">&#9662;</button>');
+                editTools.after(editToolsToggle);
             }
 
-            jQuery('#SocialCalc-cellsettingstoolbar input[type!="checkbox"],'+
-                   '#SocialCalc-settingsview input[type!="checkbox"],'+
-                   '#SocialCalc-sorttools input[type!="checkbox"], #SocialCalc-sorttools select,'+
-                   '#SocialCalc-commenttools input,'+
-                   '#SocialCalc-namestools input[type!="checkbox"], #SocialCalc-namestools select,'+
-                   '#SocialCalc-clipboardview input,'+
-                   '#SocialCalc-graphtools input, #SocialCalc-graphtools select')
-                .addClass('btn btn-default btn-xs');
+            var setEditToolsExpanded = function(expanded) {
+                editTools.toggleClass('socialcalc-edittools-expanded', expanded);
+                editToolsShell.toggleClass('socialcalc-edittools-expanded-shell', expanded);
+                editToolsToggle
+                    .attr('aria-expanded', expanded ? 'true' : 'false')
+                    .attr('aria-label', expanded ? 'Show fewer toolbar buttons' : 'Show more toolbar buttons')
+                    .attr('title', expanded ? 'Show fewer toolbar buttons' : 'Show more toolbar buttons')
+                    .html(expanded ? '&#9652;' : '&#9662;');
+            };
 
-            jQuery('#SocialCalc-commenttools textarea, #SocialCalc-clipboardview textarea').addClass('form-control');
+            var updateEditToolsOverflow = function() {
+                var toggleWidth = editToolsToggle.is(':visible') ? editToolsToggle.outerWidth(true) : 0;
+                var contentWidth = 0;
+                var toolbarWidth = editTools[0].clientWidth + toggleWidth;
 
-            jQuery('#SocialCalc-formulafunctions').prev()
-                .addClass('form-control input-sm')
-                .parent().addClass('socialcalc-formula-bar');
-            jQuery('#searchbarinput').addClass('form-control input-sm');
+                editTools.children().each(function() {
+                    contentWidth += jQuery(this).outerWidth(true);
+                });
 
-            jQuery('#SocialCalc-settings-savecell, #SocialCalc-settings-savesheet, input[value="OK"], input[value="Live Form"]')
-                .addClass('btn-primary btn btn-xs')
-                .removeClass('btn-default');
+                var hasOverflow = contentWidth > toolbarWidth + 1;
+                editToolsShell.toggleClass('socialcalc-edittools-has-overflow', hasOverflow);
 
-            jQuery(window).trigger('resize');
+                if (!hasOverflow) {
+                    setEditToolsExpanded(false);
+                }
+            };
+
+            editToolsToggle.off('click.socialcalcEditTools').on('click.socialcalcEditTools', function() {
+                setEditToolsExpanded(!editTools.hasClass('socialcalc-edittools-expanded'));
+            });
+
+            jQuery(window).off('resize.socialcalcEditTools').on('resize.socialcalcEditTools', updateEditToolsOverflow);
+            setTimeout(updateEditToolsOverflow, 0);
+        }
+
+        jQuery('#SocialCalc-cellsettingstoolbar input[type!="checkbox"],'+
+               '#SocialCalc-settingsview input[type!="checkbox"],'+
+               '#SocialCalc-sorttools input[type!="checkbox"], #SocialCalc-sorttools select,'+
+               '#SocialCalc-commenttools input,'+
+               '#SocialCalc-namestools input[type!="checkbox"], #SocialCalc-namestools select,'+
+               '#SocialCalc-clipboardview input,'+
+               '#SocialCalc-graphtools input, #SocialCalc-graphtools select')
+            .addClass('btn btn-default btn-xs');
+
+        jQuery('#SocialCalc-commenttools textarea, #SocialCalc-clipboardview textarea').addClass('form-control');
+
+        jQuery('#SocialCalc-formulafunctions').prev()
+            .addClass('form-control input-sm')
+            .parent().addClass('socialcalc-formula-bar');
+        jQuery('#searchbarinput').addClass('form-control input-sm');
+
+        jQuery('#SocialCalc-settings-savecell, #SocialCalc-settings-savesheet, input[value="OK"], input[value="Live Form"]')
+            .addClass('btn-primary btn btn-xs')
+            .removeClass('btn-default');
+
+        jQuery(window).trigger('resize');
+        setTimeout(resizeSpreadsheet, 0);
+        setTimeout(resizeSpreadsheet, 50);
     };
 
     applyMakeup();
