@@ -1,3 +1,8 @@
+# 20201228.1
+
+- Significantly sped up grain loading.
+- Several upstream improvements and changes, particularly localization.
+
 # 20160501.1
 
 - Fixed charting in Graph tab.

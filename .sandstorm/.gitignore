@@ -6,3 +6,6 @@ box.local.toml
 
 # Vagrant sometimes generates log files:
 *.log
+
+# Don't commit build SPKs
+*.spk

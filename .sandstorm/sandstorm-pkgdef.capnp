@@ -17,9 +17,9 @@ const pkgdef :Spk.PackageDefinition = (
     # This manifest is included in your app package to tell Sandstorm
     # about your app.
 
-    appVersion = 201910080,  # Increment this for every release.
+    appVersion = 202012281,  # Increment this for every release.
     appTitle = (defaultText = "EtherCalc"),
-    appMarketingVersion = (defaultText = "2019.10.08.0"),
+    appMarketingVersion = (defaultText = "2020.12.28.1+sandstorm1"),
 
     actions = [
       # Define your "new document" handlers here.
@@ -47,12 +47,12 @@ const pkgdef :Spk.PackageDefinition = (
       ),
 
       website = "http://ethercalc.net/",
-      codeUrl = "https://github.com/audreyt/ethercalc",
+      codeUrl = "https://github.com/sandstorm-org/ethercalc-sandstorm",
       license = (openSource = cpal),
       categories = [office, productivity],
 
       author = (
-        contactEmail = "audreyt@audreyt.org",
+        contactEmail = "inbox@jacobweisz.com",
         pgpSignature = embed "pgp-signature",
         upstreamAuthor = "Audrey Tang",
       ),
