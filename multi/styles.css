@@ -11,8 +11,8 @@ nav,
   border-top: 1px solid black;
   position: absolute !important;
   font-size: 16px;
-  height: 22px;
-  bottom: 5px;
+  height: 28px;
+  bottom: 0;
 }
 
 nav {
@@ -37,7 +37,7 @@ nav {
   font-family: Helvetica, sans-serif;
   background: #eee;
   font-size: 14px;
-  height: 22px;
+  height: 28px;
   border-radius: 3px;
   border: 1px solid #eee;
   margin-left: 2px;
@@ -97,15 +97,16 @@ iframe {
 .wrapper {
   position: absolute;
   width: 100%;
-  bottom: 51px;
+  bottom: 31px;
   top: 0;
 }
 
 body > .nav > .buttons,
 body > .nav > .basic-tabs > nav.basic-tabs.basic-tabs-strip {
-  height: 43px;
+  height: 28px;
 }
 
 body > .nav > .basic-tabs > nav.basic-tabs.basic-tabs-strip {
+  height: 28px;
   overflow-x: auto;
 }

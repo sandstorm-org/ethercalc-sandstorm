@@ -327,6 +327,11 @@ body {
     border-color:transparent !important;
 }
 
+#SocialCalc-statusline {
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+}
+
 /* Tabs container  = div 2 */
 #tableeditor > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) {
     background-color:transparent !important;
