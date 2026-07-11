@@ -8,6 +8,9 @@
   <script src="./static/jquery.js"></script>
 <script>
 var rABS = typeof FileReader !== "undefined" && typeof FileReader.prototype !== "undefined" && typeof FileReader.prototype.readAsBinaryString !== "undefined";
+// Sandstorm's CSP disables web workers. XLSX parsing already has a synchronous
+// fallback below, so keep worker use configurable and disabled for this page.
+var useXlsxWorker = false;
 function fixdata(data) {
 	var o = "", l = 0, w = 10240;
 	for(; l<data.byteLength/w; ++l)
@@ -238,7 +241,7 @@ function importFiles(files) {
                         if (!/^PK\u0003\u0004/.test(data) && /^[^\n]+,(?:[^\n]+)*\n/.test(data)) {
                             return post_csv(data);
                         }
-			if(typeof Worker !== 'undefined') {
+			if(useXlsxWorker && typeof Worker !== 'undefined') {
 				xlsxworker(data, process_wb);
 			} else {
 				var wb;
