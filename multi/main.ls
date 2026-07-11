@@ -4,6 +4,8 @@ TabPanel = require \react-basic-tabs
 BasePath = \.
 Index = \foobar
 Index = RegExp.$1 if window.location.href is /\/=([^_][^\/?]*)(?:\?.*)?$/
+InitialIndex = 0
+InitialIndex = parseInt(RegExp.$1) if window.location.search is /(?:\?|&)active=(\d+)/
 HackFoldr = require(\./foldr).HackFoldr
 IsReadOnly = window.location.href is /auth=0/
 Suffix = ""
@@ -18,7 +20,7 @@ if /\?auth=/.test window.location.search
 createClass = React.createFactory << React.createClass
 App = createClass do
   propTypes: { foldr: React.PropTypes.any.isRequired }
-  getDefaultProps: -> activeIndex: 0
+  getDefaultProps: -> activeIndex: InitialIndex
   render: ->
     can-delete = @props.foldr.size! > 1
     div { className: "nav#{ if IsReadOnly then ' readonly' else '' }" },
@@ -31,6 +33,11 @@ App = createClass do
       if IsReadOnly then '' else Buttons { can-delete, @~on-add, @~on-rename, @~on-delete, @~on-import }
   get-idx: -> @props.activeIndex <? @props.foldr.lastIndex!
   get-sheet: -> @props.foldr.at(@get-idx!)
+  get-import-context: ->
+    folderId: Index
+    activeIndex: @get-idx!
+    rows: [ { row.link, row.title } for row in @props.foldr.rows ]
+  componentDidMount: -> window.getImportContext = @~get-import-context
   componentDidUpdate: ->
     for node in document.getElementsByTagName('iframe')
       renderFrameContent node, @props.foldr.rows
@@ -67,7 +74,7 @@ App = createClass do
     foldr.delete-at @get-idx!
     @setProps { foldr }
   on-import: (event) ->
-    window.importFiles Array.prototype.slice.call(event.target.files)
+    window.importFiles Array.prototype.slice.call(event.target.files), @get-import-context!
 
 Buttons = createClass do
   open-file-picker: ->
