@@ -4,33 +4,41 @@ body {
   overflow: hidden;
 }
 
+body > .nav {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  height: 29px;
+}
+
+body > .nav > .basic-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 nav,
 .buttons {
   background: #eee;
   font-family: Helvetica, sans-serif;
   border-top: 1px solid black;
-  position: absolute !important;
+  box-sizing: border-box;
+  position: static !important;
   font-size: 16px;
   height: 28px;
-  bottom: 0;
 }
 
 nav {
-  right: 260px;
-  left: 0;
   padding-left: 8px;
   white-space: nowrap;
 }
 
-.readonly nav {
-  right: 0;
-}
-
 .buttons {
-  width: 260px;
-  right: 0;
+  flex: 0 0 auto;
   padding-right: 8px;
   text-align: right;
+  white-space: nowrap;
 }
 
 .buttons button {
@@ -95,7 +103,9 @@ iframe {
 }
 
 .wrapper {
-  position: absolute;
+  position: fixed;
+  right: 0;
+  left: 0;
   width: 100%;
   bottom: 31px;
   top: 0;
@@ -107,6 +117,7 @@ body > .nav > .basic-tabs > nav.basic-tabs.basic-tabs-strip {
 }
 
 body > .nav > .basic-tabs > nav.basic-tabs.basic-tabs-strip {
+  width: 100%;
   height: 28px;
   overflow-x: auto;
 }
