@@ -40,22 +40,6 @@ if (window.SocialCalc && !window.SocialCalc.EtherCalcUsesFlexResize) {
             );
         };
 
-        var applyFlexClasses = function(spreadsheet) {
-            addClass(spreadsheet.parentNode, 'socialcalc-flex-parent');
-            addClass(spreadsheet.spreadsheetDiv, 'socialcalc-spreadsheet-shell');
-            addClass(spreadsheet.editorDiv, 'socialcalc-main-view');
-
-            var views = spreadsheet.views || {};
-            for (var vname in views) {
-                if (!Object.prototype.hasOwnProperty.call(views, vname)) {
-                    continue;
-                }
-                if (views[vname] && views[vname].element) {
-                    addClass(views[vname].element, 'socialcalc-main-view');
-                }
-            }
-        };
-
         var getParentSize = function(spreadsheet) {
             var parent = spreadsheet.parentNode;
             var viewportSize = getViewportClientSize();
@@ -71,49 +55,58 @@ if (window.SocialCalc && !window.SocialCalc.EtherCalcUsesFlexResize) {
             };
         };
 
-        var isVisible = function(element) {
-            if (!element) {
-                return false;
+        var ensureViewSlot = function(spreadsheet) {
+            if (!spreadsheet.spreadsheetDiv || !spreadsheet.editorDiv) {
+                return null;
             }
-            if (window.getComputedStyle) {
-                return window.getComputedStyle(element).display !== 'none';
-            }
-            return element.style.display !== 'none';
-        };
 
-        var getActiveViewElement = function(spreadsheet) {
+            var viewSlot = spreadsheet.ethercalcViewSlot;
+            if (!viewSlot || viewSlot.parentNode !== spreadsheet.spreadsheetDiv) {
+                viewSlot = document.createElement('div');
+                viewSlot.className = 'socialcalc-view-slot';
+                spreadsheet.spreadsheetDiv.insertBefore(viewSlot, spreadsheet.editorDiv);
+                spreadsheet.ethercalcViewSlot = viewSlot;
+            }
+
+            var addView = function(element) {
+                if (!element) {
+                    return;
+                }
+                addClass(element, 'socialcalc-main-view');
+                if (element.parentNode !== viewSlot) {
+                    viewSlot.appendChild(element);
+                }
+            };
+
+            addView(spreadsheet.editorDiv);
+
             var views = spreadsheet.views || {};
-            var tabs = spreadsheet.tabs || [];
-            var tab = tabs[spreadsheet.currentTab];
-            var viewName = tab && tab.view ? tab.view : 'sheet';
-            var view = views[viewName];
-
-            if (view && isVisible(view.element)) {
-                return view.element;
-            }
-
             for (var vname in views) {
                 if (!Object.prototype.hasOwnProperty.call(views, vname)) {
                     continue;
                 }
-                if (views[vname] && isVisible(views[vname].element)) {
-                    return views[vname].element;
-                }
+                addView(views[vname] && views[vname].element);
             }
 
-            return spreadsheet.editorDiv;
+            return viewSlot;
         };
 
-        var getActiveViewHeight = function(spreadsheet) {
-            var viewElement = getActiveViewElement(spreadsheet);
-            var rect = viewElement && viewElement.getBoundingClientRect ?
-                viewElement.getBoundingClientRect() :
+        var applyFlexLayout = function(spreadsheet) {
+            addClass(spreadsheet.spreadsheetDiv, 'socialcalc-spreadsheet-shell');
+            return ensureViewSlot(spreadsheet);
+        };
+
+        var getElementHeight = function(element) {
+            if (!element) {
+                return 0;
+            }
+            var rect = element.getBoundingClientRect ?
+                element.getBoundingClientRect() :
                 null;
 
             return Math.floor(
                 (rect && rect.height) ||
-                (viewElement && viewElement.clientHeight) ||
-                spreadsheet.height - (spreadsheet.nonviewheight || 0) ||
+                element.clientHeight ||
                 0
             );
         };
@@ -128,7 +121,7 @@ if (window.SocialCalc && !window.SocialCalc.EtherCalcUsesFlexResize) {
             var spreadsheetWidth = Math.floor(parentSize.width);
             var spreadsheetHeight = Math.floor(parentSize.height);
 
-            applyFlexClasses(spreadsheet);
+            applyFlexLayout(spreadsheet);
 
             if (!spreadsheet.requestedWidth &&
                 spreadsheet.spreadsheetDiv &&
@@ -173,10 +166,10 @@ if (window.SocialCalc && !window.SocialCalc.EtherCalcUsesFlexResize) {
             }
 
             spreadsheet.SizeSSDiv();
-            applyFlexClasses(spreadsheet);
+            var viewSlot = applyFlexLayout(spreadsheet);
 
             var viewWidth = spreadsheet.width;
-            var viewHeight = getActiveViewHeight(spreadsheet) ||
+            var viewHeight = getElementHeight(viewSlot) ||
                 spreadsheet.height - (spreadsheet.nonviewheight || 0);
             var views = spreadsheet.views;
 
