@@ -224,13 +224,10 @@ function newId (len, radix) {
   };
 
 var drop = document.body;
-function handleDrop(e) {
-	e.stopPropagation();
-	e.preventDefault();
+function importFiles(files) {
         var toggle = function(){
             $(drop).fadeOut('fast', function(){ $(drop).fadeIn('fast', toggle) });
         }
-	var files = e.dataTransfer.files;
 	var i,f;
         $(drop).html('<br><br><center>Working...</center>');
 	for (i = 0, f = files[i]; i != files.length; ++i) {
@@ -257,6 +254,14 @@ function handleDrop(e) {
 		if(rABS) reader.readAsBinaryString(f);
 		else reader.readAsArrayBuffer(f);
 	}
+}
+
+window.importFiles = importFiles;
+
+function handleDrop(e) {
+	e.stopPropagation();
+	e.preventDefault();
+	importFiles(e.dataTransfer.files);
 }
 
 function handleDragover(e) {

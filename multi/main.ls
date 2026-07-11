@@ -13,7 +13,7 @@ if /\?auth=/.test window.location.search
   BasePath = \.. if BasePath is \.
   window.history.pushState {} '' "./=#Index#Suffix"
 
-{div, iframe, input, button} = React.DOM
+{div, iframe, button} = React.DOM
 
 createClass = React.createFactory << React.createClass
 App = createClass do
@@ -23,7 +23,7 @@ App = createClass do
     can-delete = @props.foldr.size! > 1
     div { className: "nav#{ if IsReadOnly then ' readonly' else '' }" },
       Nav { rows: @props.foldr.rows, activeIndex: @get-idx!, @~onChange }
-      if IsReadOnly then '' else Buttons { can-delete, @~on-add, @~on-rename, @~on-delete }
+      if IsReadOnly then '' else Buttons { can-delete, @~on-add, @~on-rename, @~on-delete, @~on-import }
   get-idx: -> @props.activeIndex <? @props.foldr.lastIndex!
   get-sheet: -> @props.foldr.at(@get-idx!)
   componentDidUpdate: ->
@@ -60,13 +60,24 @@ App = createClass do
     return unless confirm("Really delete?\n#{ @get-sheet!title }")
     foldr.delete-at @get-idx!
     @setProps { foldr }
+  on-import: (event) ->
+    window.importFiles Array.prototype.slice.call(event.target.files)
 
 Buttons = createClass do
+  open-file-picker: ->
+    picker = document.createElement \input
+    picker.type = \file
+    picker.accept = ".csv,.ods,.xlsx"
+    picker.style.display = \none
+    picker.onchange = @props.on-import
+    document.body.appendChild picker
+    picker.click!
   render: ->
     div { className: \buttons },
       button { onClick: @props.on-add }, \Add
       button { onClick: @props.on-rename }, \Rename...
       button { onClick: @props.on-delete, disabled: !@props.can-delete }, \Delete
+      button { onClick: @~open-file-picker }, \Import
 
 Nav = createClass do
   onChange: -> @props.onChange it

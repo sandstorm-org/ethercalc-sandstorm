@@ -16,7 +16,7 @@ nav,
 }
 
 nav {
-  right: 200px;
+  right: 260px;
   left: 0;
   padding-left: 8px;
   white-space: nowrap;
@@ -27,7 +27,7 @@ nav {
 }
 
 .buttons {
-  width: 200px;
+  width: 260px;
   right: 0;
   padding-right: 8px;
   text-align: right;
