@@ -3,8 +3,9 @@ React = require \react
 TabPanel = require \react-basic-tabs
 BasePath = \.
 Index = \foobar
-Index = RegExp.$1 if window.location.href is /\/=([^_][^\/?]*)(?:\?.*)?$/
+Index = RegExp.$1 if window.location.pathname is /\/=([^_][^\/]*)/
 InitialIndex = 0
+InitialIndex = parseInt(RegExp.$1) if window.location.hash is /^#sheet=(\d+)$/
 InitialIndex = parseInt(RegExp.$1) if window.location.search is /(?:\?|&)active=(\d+)/
 HackFoldr = require(\./foldr).HackFoldr
 IsReadOnly = window.location.href is /auth=0/
@@ -37,14 +38,21 @@ App = createClass do
     folderId: Index
     activeIndex: @get-idx!
     rows: [ { row.link, row.title } for row in @props.foldr.rows ]
-  componentDidMount: -> window.getImportContext = @~get-import-context
+  componentDidMount: ->
+    window.getImportContext = @~get-import-context
+    @persist-selection @get-idx!
   componentDidUpdate: ->
     for node in document.getElementsByTagName('iframe')
       renderFrameContent node, @props.foldr.rows
   onChange: ->
     activeIndex = it
     @setProps { activeIndex }
+    @persist-selection activeIndex
     setTimeout (-> focusFrame activeIndex), 0ms
+  persist-selection: (activeIndex) ->
+    hash = '#' + 'sheet=' + activeIndex
+    window.history.replaceState {} '' "#{ window.location.pathname }#hash" unless window.location.hash is hash
+    window.parent.postMessage { setPath: window.location.pathname + hash }, \*
   on-add: ->
     { foldr } = @props
     prefix = \Sheet
