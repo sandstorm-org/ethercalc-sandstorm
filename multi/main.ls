@@ -22,7 +22,12 @@ App = createClass do
   render: ->
     can-delete = @props.foldr.size! > 1
     div { className: "nav#{ if IsReadOnly then ' readonly' else '' }" },
-      Nav { rows: @props.foldr.rows, activeIndex: @get-idx!, @~onChange }
+      Nav {
+        rows: @props.foldr.rows
+        activeIndex: @get-idx!
+        onRename: if IsReadOnly then null else @~on-rename
+        @~onChange
+      }
       if IsReadOnly then '' else Buttons { can-delete, @~on-add, @~on-rename, @~on-delete, @~on-import }
   get-idx: -> @props.activeIndex <? @props.foldr.lastIndex!
   get-sheet: -> @props.foldr.at(@get-idx!)
@@ -48,12 +53,13 @@ App = createClass do
     activeIndex = foldr.size!
     foldr.=push { link: "#link-prefix#next-sheet", title: "#prefix#next-sheet" }
     @setProps { foldr, activeIndex }
-  on-rename: ->
+  on-rename: (idx) ->
     { foldr } = @props
-    title = prompt("Rename Sheet", @get-sheet!title)
+    idx = @get-idx! unless typeof idx is \number
+    title = prompt("Rename Sheet", foldr.at(idx).title)
     return if not title? or title.toLowerCase! in [ t.toLowerCase! for t in foldr.titles! ]
     # TODO: Carry over the data if non-empty
-    foldr.set-at @get-idx!, { title }
+    foldr.set-at idx, { title }
     @setProps { foldr }
   on-delete: ->
     { foldr } = @props
@@ -81,8 +87,22 @@ Buttons = createClass do
 
 Nav = createClass do
   onChange: -> @props.onChange it
+  on-double-click: (event) ->
+    return unless @props.onRename
+    item = event.target
+    while item? and item.tagName isnt \LI then item = item.parentNode
+    return unless item?
+    items = item.parentNode.children
+    for candidate, idx in items when candidate is item
+      event.preventDefault!
+      return @props.onRename idx
   render: ->
-    TabPanel { activeIndex: @props.activeIndex, @~onChange, tabVerticalPosition: \bottom },
+    TabPanel {
+      activeIndex: @props.activeIndex
+      @~onChange
+      onDoubleClick: @~on-double-click
+      tabVerticalPosition: \bottom
+    },
       ...for { title, link="/#{ encodeURIComponent title }" } in @props.rows
         div { key: title, title, className: \wrapper },
           Frame { src: "#BasePath#link#Suffix", rows: @props.rows }
