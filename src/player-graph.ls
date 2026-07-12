@@ -707,7 +707,7 @@
   scc.SCTabbackground = 'background-color:#' + unselectedbg + ';'
   scc.SCTabselectedCSS = 'font-size:small;padding:6px 30px 6px 8px;color:#FFF;background-color:#' + selectedbg + ';cursor:default;border-right:1px solid #CC' + b2 + ';'
   scc.SCTabplainCSS = 'font-size:small;padding:6px 30px 6px 8px;color:#FFF;background-color:#' + unselectedbg + ';cursor:default;border-right:1px solid #CC' + b2 + ';'
-  scc.SCToolbartext = 'font-size:x-small;font-weight:bold;color:#FFF;padding-bottom:4px;'
+  scc.SCToolbartext = 'font-size:x-small;font-weight:bold;color:#333;padding-bottom:4px;'
   scc.ISCButtonBorderNormal = '#'+selectedbg
   scc.ISCButtonBorderHover = '#99' + b4
   scc.ISCButtonBorderDown = '#FFF'
