@@ -1,6 +1,8 @@
 # 20201228.1
 
 - Significantly sped up grain loading.
+- Improved mobile responsiveness.
+- Imports now add new sheets instead of replacing existing content.
 - Several upstream improvements and changes, particularly localization.
 
 # 20160501.1
