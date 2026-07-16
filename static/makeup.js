@@ -269,11 +269,27 @@ jQuery(document).ready(function() {
                 }
             };
 
+            var updateEditToolsActive = function() {
+                editToolsShell.toggleClass('socialcalc-edittools-active', editTools.is(':visible'));
+            };
+
+            if (window.SocialCalc && SocialCalc.SetTab && !SocialCalc.EtherCalcTracksEditToolsTab) {
+                var setTab = SocialCalc.SetTab;
+                SocialCalc.SetTab = function() {
+                    var result = setTab.apply(this, arguments);
+                    updateEditToolsActive();
+                    setTimeout(updateEditToolsOverflow, 0);
+                    return result;
+                };
+                SocialCalc.EtherCalcTracksEditToolsTab = true;
+            }
+
             editToolsToggle.off('click.socialcalcEditTools').on('click.socialcalcEditTools', function() {
                 setEditToolsExpanded(!editTools.hasClass('socialcalc-edittools-expanded'));
             });
 
             jQuery(window).off('resize.socialcalcEditTools').on('resize.socialcalcEditTools', updateEditToolsOverflow);
+            updateEditToolsActive();
             setTimeout(updateEditToolsOverflow, 0);
         }
 

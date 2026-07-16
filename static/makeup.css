@@ -233,8 +233,18 @@ body {
 }
 
 /* Toolbar */
-#tableeditor div:has(> #SocialCalc-edittools) {
-    background: transparent !important;
+#SocialCalc-settingstools,
+#SocialCalc-sorttools,
+#SocialCalc-audittools,
+#SocialCalc-commenttools,
+#SocialCalc-namestools,
+#SocialCalc-clipboardtools {
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+}
+
+#SocialCalc-commenttext {
+    height: 26px !important;
 }
 
 .socialcalc-edittools-shell {
@@ -298,7 +308,7 @@ body {
     line-height: 18px;
 }
 
-.socialcalc-edittools-has-overflow > .socialcalc-edittools-toggle {
+.socialcalc-edittools-active.socialcalc-edittools-has-overflow > .socialcalc-edittools-toggle {
     display: block;
 }
 
