@@ -1,6 +1,17 @@
 name: Build SPK
 
-on: push
+on:
+  push:
+    branches:
+      - master
+      - main
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - labeled
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -14,6 +25,10 @@ concurrency:
 jobs:
   build-test-spk:
     name: Build Test SPK
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/')) ||
+      (github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'ok-to-test'))
     uses: ./.github/workflows/spk-build-reusable.yml
     with:
       environment_name: test-spk
