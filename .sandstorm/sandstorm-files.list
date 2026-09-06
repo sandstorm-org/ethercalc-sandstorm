@@ -17,6 +17,7 @@ lib64
 opt/app/.sandstorm/run_grain.sh
 opt/app/dist/app.js
 opt/app/dist/app.js.map
+opt/app/favicon.ico
 opt/app/images/sc-commentbg.gif
 opt/app/images/sc_1x1.gif
 opt/app/images/sc_aligncenter.png
@@ -46,6 +47,7 @@ opt/app/images/sc_insertcolumns.png
 opt/app/images/sc_insertformula.png
 opt/app/images/sc_inserthyperlink.png
 opt/app/images/sc_insertrows.png
+opt/app/images/sc_less-hd.gif
 opt/app/images/sc_less-hh.gif
 opt/app/images/sc_less-hn.gif
 opt/app/images/sc_less-vh.gif
@@ -56,6 +58,7 @@ opt/app/images/sc_logo.gif
 opt/app/images/sc_main-h.gif
 opt/app/images/sc_main-v.gif
 opt/app/images/sc_mergecells.png
+opt/app/images/sc_more-hd.gif
 opt/app/images/sc_more-hh.gif
 opt/app/images/sc_more-hn.gif
 opt/app/images/sc_more-vn.gif
@@ -72,6 +75,7 @@ opt/app/images/sc_scrollarea-v.gif
 opt/app/images/sc_swapcolors.png
 opt/app/images/sc_thumb-hh.gif
 opt/app/images/sc_thumb-hn.gif
+opt/app/images/sc_thumb-vd.gif
 opt/app/images/sc_thumb-vh.gif
 opt/app/images/sc_thumb-vn.gif
 opt/app/images/sc_undo.png
@@ -149,7 +153,7 @@ opt/app/static/vex-theme-flat-attack.css
 opt/app/static/vex.css
 opt/app/static/xlsx.core.min.js
 proc/cpuinfo
-run/systemd/resolve/stub-resolv.conf
+run/systemd/userdb
 sandstorm-http-bridge
 sandstorm-http-bridge-config
 sandstorm-manifest
@@ -159,15 +163,18 @@ usr/bin/node
 usr/bin/nodejs
 usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
 usr/lib/x86_64-linux-gnu/libc.so.6
+usr/lib/x86_64-linux-gnu/libcap.so.2
+usr/lib/x86_64-linux-gnu/libcap.so.2.66
 usr/lib/x86_64-linux-gnu/libdl.so.2
 usr/lib/x86_64-linux-gnu/libgcc_s.so.1
 usr/lib/x86_64-linux-gnu/libm.so.6
 usr/lib/x86_64-linux-gnu/libnghttp2.so.14
+usr/lib/x86_64-linux-gnu/libnss_systemd.so.2
 usr/lib/x86_64-linux-gnu/libpthread.so.0
 usr/lib/x86_64-linux-gnu/libstdc++.so.6
-usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33
+usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.30
 usr/lib/x86_64-linux-gnu/libtinfo.so.6
-usr/lib/x86_64-linux-gnu/libtinfo.so.6.5
+usr/lib/x86_64-linux-gnu/libtinfo.so.6.4
 usr/lib/x86_64-linux-gnu/libuv.so.1
 usr/lib/x86_64-linux-gnu/libuv.so.1.0.0
 usr/lib64/ld-linux-x86-64.so.2

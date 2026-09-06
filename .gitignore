@@ -11,3 +11,5 @@ static/ethercalc.js.map
 static/multi.js
 static/multi.js.map
 static/socket.io.js
+
+*.spk
