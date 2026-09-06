@@ -16,6 +16,9 @@ HAS_RUNTIME_ENV=false
 if [[ -f "${RUNTIME_ENV}" ]]; then
     . "${RUNTIME_ENV}"
     HAS_RUNTIME_ENV=true
+else
+    # default runtime env
+    SANDSTORM_GUEST_PORT=6090
 fi
 
 SANDSTORM_INSTALL_SCRIPT_URL="https://install.sandstorm.io/"
@@ -86,11 +89,7 @@ if [[ ! -f /host-dot-sandstorm/caches/$SANDSTORM_PACKAGE ]] ; then
 fi
 if [ ! -e /opt/sandstorm/latest/sandstorm ] ; then
     echo -n "Installing Sandstorm version ${SANDSTORM_CURRENT_VERSION}..."
-    INSTALL_ARGS=(-d -e)
-    if [[ "${HAS_RUNTIME_ENV}" == true ]]; then
-        INSTALL_ARGS+=(-p "${SANDSTORM_GUEST_PORT}")
-    fi
-    REPORT=no bash /host-dot-sandstorm/caches/install.sh "${INSTALL_ARGS[@]}" "/host-dot-sandstorm/caches/$SANDSTORM_PACKAGE" >/dev/null
+    REPORT=no bash /host-dot-sandstorm/caches/install.sh -d -e -p "${SANDSTORM_GUEST_PORT}" "/host-dot-sandstorm/caches/$SANDSTORM_PACKAGE" >/dev/null
     echo "...done."
 fi
 modprobe ip_tables
@@ -101,7 +100,7 @@ fi
 sudo sed --in-place='' \
         --expression='s/^BIND_IP=.*/BIND_IP=0.0.0.0/' \
         /opt/sandstorm/sandstorm.conf
-if [[ "${HAS_RUNTIME_ENV}" == true ]]; then
+if $HAS_RUNTIME_ENV; then
     sudo sed --in-place='' \
             --expression="s#^PORT=.*#PORT=${SANDSTORM_GUEST_PORT}#" \
             --expression="s#^BASE_URL=.*#BASE_URL=${SANDSTORM_BASE_URL}#" \

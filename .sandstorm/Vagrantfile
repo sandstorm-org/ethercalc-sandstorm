@@ -100,12 +100,13 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
     libvirt.cpus = cpus
     libvirt.memory = assign_ram_mb
     libvirt.default_prefix = VM_NAME
+    libvirt.memorybacking :access, :mode => "shared"
 
     # /opt/app and /host-dot-sandstorm are used by vagrant-spk
-    override.vm.synced_folder "..", "/opt/app", type: "9p", accessmode: "mapped"
-    override.vm.synced_folder ENV["HOME"] + "/.sandstorm", "/host-dot-sandstorm", type: "9p", accessmode: "mapped"
+    override.vm.synced_folder "..", "/opt/app", type: "virtiofs"
+    override.vm.synced_folder ENV["HOME"] + "/.sandstorm", "/host-dot-sandstorm", type: "virtiofs"
     # /vagrant is not used by vagrant-spk; we need this line so it gets disabled; if we removed the
     # line, vagrant would automatically insert a synced folder in /vagrant, which is not what we want.
-    override.vm.synced_folder "..", "/vagrant", type: "9p", accessmode: "mapped", disabled: true
+    override.vm.synced_folder "..", "/vagrant", type: "9p", disabled: true
   end
 end
