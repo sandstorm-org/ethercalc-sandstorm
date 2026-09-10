@@ -31,7 +31,10 @@ mapfile -t package_files < <(sed -E '\|^usr/lib/.*\.so\.[0-9]+\.[0-9.]+$|d' .san
 library_targets=()
 for package_file in "${package_files[@]}"; do
   if [[ "$package_file" == usr/lib/*.so.* ]]; then
-    library_target=$(readlink -e "/$package_file")
+    if ! library_target=$(readlink -e "/$package_file"); then
+      echo "Missing required runtime library: /$package_file" >&2
+      exit 1
+    fi
     library_targets+=("${library_target#/}")
   fi
 done
