@@ -322,7 +322,8 @@ Check the activity stream to see the newly edited page!
         buttons: [
           $.extend {}, vex?dialog.buttons.YES, text: 'Excel', click: ->
             if isMultiple
-              if window.parent.location.href.match(/(^.*\/=[^?/]+)/)
+              # Use only the path: a #sheet fragment would swallow the extension.
+              if window.parent.location.pathname.match(/(^.*\/=[^/]+)/)
                 window.open "#{ RegExp.$1 }.xlsx"
               else
                 window.open ".#{if window.parent.location.pathname.match('\/.*\/view$') || window.parent.location.pathname.match('\/.*\/edit$') then '.' else ''}/=#{ SocialCalc._room.replace(/\.[1-9]\d*$/, '') }.xlsx"
@@ -334,7 +335,7 @@ Check the activity stream to see the newly edited page!
             window.open ".#{if window.parent.location.pathname.match('\/.*\/view$') || window.parent.location.pathname.match('\/.*\/edit$') then '.' else ''}/#{ SocialCalc._room }.html"
           $.extend {}, vex?dialog.buttons.YES, text: 'ODS', click: ->
             if isMultiple
-              if window.parent.location.href.match(/(^.*\/=[^?/]+)/)
+              if window.parent.location.pathname.match(/(^.*\/=[^/]+)/)
                 window.open "#{ RegExp.$1 }.ods"
               else
                 window.open ".#{if window.parent.location.pathname.match('\/.*\/view$') || window.parent.location.pathname.match('\/.*\/edit$') then '.' else ''}/=#{ SocialCalc._room.replace(/\.[1-9]\d*$/, '') }.ods"
