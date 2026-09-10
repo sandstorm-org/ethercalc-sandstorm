@@ -24,4 +24,17 @@ cd /opt/app
 npm install
 npm run build:sandstorm
 
+# Refresh shared-library targets for the build VM. spk preserves symlinks,
+# so both the stable SONAME and its installed target must be in the file list.
+# Discard previously recorded versioned targets before resolving them again.
+mapfile -t package_files < <(sed -E '\|^usr/lib/.*\.so\.[0-9]+\.[0-9.]+$|d' .sandstorm/sandstorm-files.list)
+library_targets=()
+for package_file in "${package_files[@]}"; do
+  if [[ "$package_file" == usr/lib/*.so.* ]]; then
+    library_target=$(readlink -e "/$package_file")
+    library_targets+=("${library_target#/}")
+  fi
+done
+printf '%s\n' "${package_files[@]}" "${library_targets[@]}" | sort -u > .sandstorm/sandstorm-files.list
+
 # bower install
