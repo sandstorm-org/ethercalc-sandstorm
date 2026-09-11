@@ -86,7 +86,7 @@ jobs:
         run: /tmp/vagrant-spk/lima-spk vm up
 
       - name: Build app in Lima VM
-        run: printf "cd /opt/app\nsg sandstorm -c '/opt/app/.sandstorm/build.sh'\nexit\n" | lima-spk vm ssh
+        run: printf "set -e\ncd /opt/app\nexec sg sandstorm -c '/opt/app/.sandstorm/build.sh'\n" | lima-spk vm ssh
 
       - name: Build SPK
         id: build-spk

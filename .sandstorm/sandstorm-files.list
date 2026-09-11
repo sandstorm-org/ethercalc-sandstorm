@@ -153,7 +153,6 @@ opt/app/static/vex-theme-flat-attack.css
 opt/app/static/vex.css
 opt/app/static/xlsx.core.min.js
 proc/cpuinfo
-run/systemd/userdb
 sandstorm-http-bridge
 sandstorm-http-bridge-config
 sandstorm-manifest
@@ -164,19 +163,14 @@ usr/bin/nodejs
 usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
 usr/lib/x86_64-linux-gnu/libc.so.6
 usr/lib/x86_64-linux-gnu/libcap.so.2
-usr/lib/x86_64-linux-gnu/libcap.so.2.66
 usr/lib/x86_64-linux-gnu/libdl.so.2
 usr/lib/x86_64-linux-gnu/libgcc_s.so.1
 usr/lib/x86_64-linux-gnu/libm.so.6
 usr/lib/x86_64-linux-gnu/libnghttp2.so.14
-usr/lib/x86_64-linux-gnu/libnss_systemd.so.2
 usr/lib/x86_64-linux-gnu/libpthread.so.0
 usr/lib/x86_64-linux-gnu/libstdc++.so.6
-usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.30
 usr/lib/x86_64-linux-gnu/libtinfo.so.6
-usr/lib/x86_64-linux-gnu/libtinfo.so.6.4
 usr/lib/x86_64-linux-gnu/libuv.so.1
-usr/lib/x86_64-linux-gnu/libuv.so.1.0.0
 usr/lib64/ld-linux-x86-64.so.2
 usr/share/zoneinfo/America/Chicago
 usr/share/zoneinfo/Etc/UTC
